@@ -1,36 +1,32 @@
 #pragma once
 
 #include <memory>
-#include <functional>
-
-#include "error.hpp"
-#include "sdlgl.hpp"
+#include <type_traits>
 
 namespace arc {
 
-class Window;
-using WindowPtr = std::shared_ptr<const Window>;
+
+
+/*todo: window flags should be replaced with a builder pattern*/
 
 class Window {
 public:
-    Window(SDL_Window* ptr);
     ~Window();
-    Window(Window&&) = delete;
-    Window(const Window&) = delete;
-    Window operator=(Window&&) = delete;
-    Window operator=(const Window&) = delete;
+    Window(arc::Window&&);
 
-    const SDL_Window* ptr(void) const { return m_ptr; }
+    [[nodiscard]]
+    static Window create(const char *title, int x, int y, int w, int h, uint32_t flags);
+
+    [[nodiscard]]
+    std::pair<int, int> size() const noexcept;
+
+    void resize(int w, int h);
+
 private:
-    SDL_Window* m_ptr;
+    Window();
+    class Impl;
+    //std::unique_ptr<Impl> m_impl;
+    Impl* m_impl;
 };
-
-[[nodiscard]]
-WindowPtr make_Window(const char *title, int x, int y, int w, int h, Uint32 flags);
-
-[[nodiscard]]
-std::pair<int, int> size(const WindowPtr window) noexcept;
-
-void resize(WindowPtr window, int w, int h);
 
 }

@@ -9,38 +9,40 @@
 
 namespace arc {
 
+void maybe_throw_gl_error(const char* _file_, size_t _line_);
 
-enum class MessageType {
-    WARNING,
-    ERROR,
-    FATAL,
-};
+void maybe_throw_sdl_error(const char* _file_, size_t _line_);
 
-class Message {
+class Log {
 public:
-    Message(const char *_FILE_, size_t _LINE_, const std::string &what,
-            MessageType type)
-        : m_file(_FILE_), m_line(_LINE_), m_what(what), m_type(type) {}
+    Log(const char *_FILE_, size_t _LINE_, const std::string &what) noexcept;
+    ~Log() = default;
 
-    const std::string& what(void) { return m_what; }
-    MessageType        type(void) { return m_type; }
-    const char*        file(void) { return m_file; }
-    size_t             line(void) { return m_line; }
+    [[nodiscard]]
+    const std::string& what(void) const noexcept;
+
+    [[nodiscard]]
+    const char* file(void) const noexcept;
+
+    [[nodiscard]]
+    size_t line(void) const noexcept;
 
 private:
-    const char* m_file;
-    size_t m_line;
     std::string m_what;
-    MessageType m_type;
+    const char* m_file;
+    size_t      m_line;
 };
 
-void log_info(const std::string &what);
+class Warning : public Log {
+    using Log::Log; ///< Inherit Log Constructor
+};
 
-Message warning(const char *_FILE_, size_t _LINE_, const std::string &what);
-Message error(const char *_FILE_, size_t _LINE_, const std::string &what);
-Message fatal(const char *_FILE_, size_t _LINE_, const std::string &what);
+class Error : public Log {
+    using Log::Log; ///< Inherit Log Constructor
+};
 
-void try_throw_gl_error(const char* _file_, size_t _line_);
-void try_throw_sdl_error(const char* _file_, size_t _line_);
+class Fatal : public Log {
+    using Log::Log; ///< Inherit Log Constructor
+};
 
 }

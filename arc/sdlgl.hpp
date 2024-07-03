@@ -5,7 +5,3 @@
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_opengl.h>
 #include <SDL2/SDL_syswm.h>
-
-
-#include <glm/glm.hpp>
-#include <glm/ext.hpp>
