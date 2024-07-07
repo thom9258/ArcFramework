@@ -7,10 +7,18 @@ int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
     
-    arc::GraphicsContext::ValidationLayers validation_layers = {
+    const arc::GraphicsContext::ValidationLayers validation_layers = {
         "VK_LAYER_KHRONOS_validation"
     };
-    auto context = arc::GraphicsContext::create(WIDTH, HEIGHT, validation_layers);
+
+    const std::vector<const char*> device_extensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
+
+    auto context = arc::GraphicsContext::create(WIDTH,
+                                                HEIGHT,
+                                                validation_layers,
+                                                device_extensions);
 
     bool exit = false;
     SDL_Event event;

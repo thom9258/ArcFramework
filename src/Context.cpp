@@ -3,6 +3,7 @@
 #include <iostream>
 #include <algorithm>
 #include <map>
+#include <set>
 #include <optional>
 
 #ifndef UNREFERENCED
@@ -22,7 +23,20 @@ namespace global {
 std::atomic_bool GraphicsContext_created{false};
 }
     
-
+struct DevicePropertyFeatureSet {
+    VkPhysicalDevice device;
+    VkPhysicalDeviceProperties properties;
+    VkPhysicalDeviceFeatures features;
+};
+    
+// TODO: if this thing is only needed here, then delete it and use a optional instead
+struct QueueFamilyIndices {
+    std::optional<uint32_t> graphics_family;
+    std::optional<uint32_t> present_family;
+    bool is_complete() {
+        return graphics_family && present_family;
+    }
+};
 
 VkApplicationInfo create_app_info(const char* appname) 
 {
@@ -103,12 +117,6 @@ bool is_validation_layers_supported(const GraphicsContext::ValidationLayers laye
     return true;
 }
     
-struct DevicePropertyFeatureSet {
-    VkPhysicalDevice device;
-    VkPhysicalDeviceProperties properties;
-    VkPhysicalDeviceFeatures features;
-};
-
 std::vector<VkPhysicalDevice> get_available_physical_devices(const VkInstance& instance)
 {
     uint32_t count{0};
@@ -131,22 +139,24 @@ std::vector<DevicePropertyFeatureSet> get_physical_device_properties_features(co
     return sets;
 }    
 
-// TODO: if this thing is only needed here, then delete it and use a optional instead
-struct QueueFamilyIndices {
-    std::optional<uint32_t> graphics_family;
-};
-
-QueueFamilyIndices find_queue_family_indices(std::vector<VkQueueFamilyProperties> families) {
-    QueueFamilyIndices indices;
-
-    int i = 0;
+QueueFamilyIndices find_queue_family_indices(const VkPhysicalDevice& device,
+                                             const VkSurfaceKHR& surface,
+                                             std::vector<VkQueueFamilyProperties> families)
+{
+    QueueFamilyIndices curr_indices;
+    uint32_t i = 0;
     for (const auto& family : families) {
         if (family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            indices.graphics_family = i;
+            curr_indices.graphics_family = i;
         }
+        VkBool32 present_support = false;
+        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &present_support);
+
+        if (curr_indices.is_complete())
+            break;
         i++;
     }
-    return indices;
+    return curr_indices;
 }
 
 std::vector<VkQueueFamilyProperties> get_queue_families(const VkPhysicalDevice& device)
@@ -158,7 +168,34 @@ std::vector<VkQueueFamilyProperties> get_queue_families(const VkPhysicalDevice& 
     return available;
 }
     
-uint32_t calculate_device_score(DevicePropertyFeatureSet dpf) {
+std::vector<VkExtensionProperties> get_device_extensions(const VkPhysicalDevice& device)
+{
+    uint32_t count{0};
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &count, nullptr);
+    std::vector<VkExtensionProperties> available(count);
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &count, available.data());
+    return available;
+}
+
+bool is_device_extensions_supported(VkPhysicalDevice device,
+                                    const std::vector<const char*> extensions) 
+{
+    auto actual_extensions = get_device_extensions(device);
+
+    std::set<std::string> missing;
+    for (const auto& extension: extensions)
+        missing.insert(std::string(extension));
+
+    for (const auto& actual_extension : actual_extensions) {
+        missing.erase(actual_extension.extensionName);
+    }
+    return missing.empty();
+}
+
+uint32_t calculate_device_score(DevicePropertyFeatureSet dpf,
+                                const VkSurfaceKHR& surface,
+                                const std::vector<const char*> extensions)
+{
     uint32_t score{0};
     if (dpf.device == VK_NULL_HANDLE)
         return 0;
@@ -168,32 +205,36 @@ uint32_t calculate_device_score(DevicePropertyFeatureSet dpf) {
         score += 100;
     
     const auto queue_families = get_queue_families(dpf.device);
-    auto queue_family_indices = find_queue_family_indices(queue_families); 
-    if (!queue_family_indices.graphics_family.has_value())
+    auto queue_family_indices = find_queue_family_indices(dpf.device, surface, queue_families);
+    if (!queue_family_indices.is_complete())
+        return 0;
+    if (!is_device_extensions_supported(dpf.device, extensions))
         return 0;
 
     //TODO get more score paramters...
     return score;
 }
     
-
-DevicePropertyFeatureSet find_best_device(const std::vector<DevicePropertyFeatureSet>& devices) {
-    std::multimap<uint32_t, DevicePropertyFeatureSet> candidates;
+std::vector<DevicePropertyFeatureSet> sort_devices_by_score(
+  const std::vector<DevicePropertyFeatureSet>& devices,
+  const VkSurfaceKHR& surface,
+  const std::vector<const char*> extensions) 
+{
+    std::multimap<uint32_t, DevicePropertyFeatureSet> reverse_sorted;
     for (const auto& dpf : devices)
-        candidates.insert({calculate_device_score(dpf), dpf});
-    auto best = candidates.rbegin();
-    if (best == candidates.rend()) {
-        DevicePropertyFeatureSet invalid_device; 
-        invalid_device.device = VK_NULL_HANDLE;
-        return invalid_device;
-}
-    return best->second;
-} 
+        reverse_sorted.insert({calculate_device_score(dpf, surface, extensions), dpf});
+    
+    std::vector<DevicePropertyFeatureSet> sorted;
+    for (auto it = reverse_sorted.rbegin(); it != reverse_sorted.rend(); it++)
+        sorted.push_back(it->second);
 
+    return sorted;
+}
 
 std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
                                                          uint32_t height,
-                                                         const ValidationLayers validation_layers
+                                                         const ValidationLayers validation_layers,
+                                                         const DeviceExtensions device_extensions
                                                          )
 {
     if (global::GraphicsContext_created)
@@ -245,9 +286,16 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
     if (err)
         throw std::runtime_error("vkCreateInstance() returned non-ok");
     
+    /* ===================================================================
+     * Create Window Surface as the Main Rendertarget
+     */
+
+    SDL_Vulkan_CreateSurface(graphics_context->m_window,
+                             graphics_context->m_instance, 
+                             &graphics_context->m_window_surface);
 
     /* ===================================================================
-     * Pick Physical Device
+     * Find Best Physical Device for our Instance & Window
      */
 
     const auto devices = get_available_physical_devices(graphics_context->m_instance);
@@ -260,12 +308,15 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
     for (const auto& dpf: device_property_features) {
         std::cout << "\t" << dpf.properties.deviceName << "\n";
     }
- 
-    const auto best_device = find_best_device(device_property_features);
     
-    if (best_device.device == VK_NULL_HANDLE)
-        throw std::runtime_error("Failed to find suitable Device!");
 
+    const auto sorted_devices = sort_devices_by_score(device_property_features,
+                                                      graphics_context->m_window_surface,
+                                                      device_extensions);
+    if (sorted_devices.empty())
+        throw std::runtime_error("Failed to find suitable Device!");
+    const auto best_device = sorted_devices[0];
+ 
     std::cout << "Best Device: " << best_device.properties.deviceName << "\n";
     graphics_context->m_physical_device = best_device.device;
     
@@ -273,8 +324,12 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
     /* ===================================================================
      * Create Logical Device
      */
+
     const auto queue_families = get_queue_families(graphics_context->m_physical_device);
-    const auto queue_indices = find_queue_family_indices(queue_families);
+    const auto queue_indices = find_queue_family_indices(graphics_context->m_physical_device,
+                                                         graphics_context->m_window_surface,
+                                                         queue_families);
+
     VkDeviceQueueCreateInfo queue_create_info{};
     queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queue_create_info.queueFamilyIndex = queue_indices.graphics_family.value();
@@ -289,6 +344,8 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
     device_create_info.pQueueCreateInfos = &queue_create_info;
     device_create_info.queueCreateInfoCount = 1;
     device_create_info.pEnabledFeatures = &device_features;
+    device_create_info.enabledExtensionCount = static_cast<uint32_t>(device_extensions.size());
+    device_create_info.ppEnabledExtensionNames = device_extensions.data();
 
     err = vkCreateDevice(graphics_context->m_physical_device,
                          &device_create_info,
@@ -297,7 +354,12 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
     if (err) {
         throw std::runtime_error("failed to create logical device!");
     }
-
+    
+    vkGetDeviceQueue(graphics_context->m_device, 
+                     queue_indices.graphics_family.value(),
+                     0,
+                     &graphics_context->m_graphics_queue);
+    
 
     return graphics_context;
 }
@@ -305,6 +367,8 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
 
 GraphicsContext::~GraphicsContext()
 {
+    vkDestroySurfaceKHR(m_instance, m_window_surface, nullptr);
+    vkDestroyDevice(m_device, nullptr);
     vkDestroyInstance(m_instance, nullptr);
     SDL_DestroyWindow(m_window);
     SDL_Vulkan_UnloadLibrary();

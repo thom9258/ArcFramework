@@ -13,6 +13,7 @@
 #include <memory>
 #include <atomic>
 #include <vector>
+#include <string>
 
 namespace arc {
 
@@ -20,6 +21,7 @@ namespace arc {
 class GraphicsContext {
 public:
     using ValidationLayers = std::vector<const char*>;
+    using DeviceExtensions = std::vector<const char*>;
     GraphicsContext() = default;
     ~GraphicsContext();
     GraphicsContext(GraphicsContext&&) = delete;
@@ -30,14 +32,17 @@ public:
     [[nodiscard]]
     static std::unique_ptr<GraphicsContext> create(uint32_t width,
                                                    uint32_t height,
-                                                   const ValidationLayers validation_layers
+                                                   const ValidationLayers validation_layers,
+                                                   const DeviceExtensions device_extensions
                                                    );
 
 private:
     VkInstance m_instance;
     VkPhysicalDevice m_physical_device{VK_NULL_HANDLE};
     VkDevice m_device{VK_NULL_HANDLE};
+    VkQueue m_graphics_queue;
     SDL_Window* m_window{nullptr};
+    VkSurfaceKHR m_window_surface;
 };
 
 
