@@ -22,9 +22,8 @@ namespace arc {
 namespace global {
 std::atomic_bool GraphicsContext_created{false};
 }
-    
-struct DevicePropertyFeatureSet {
-    VkPhysicalDevice device;
+
+struct PhysicalDevicePropertyFeatureSet {
     VkPhysicalDeviceProperties properties;
     VkPhysicalDeviceFeatures features;
 };
@@ -126,19 +125,24 @@ std::vector<VkPhysicalDevice> get_available_physical_devices(const VkInstance& i
     return available;
 }
     
-std::vector<DevicePropertyFeatureSet> get_physical_device_properties_features(const std::vector<VkPhysicalDevice>& devices)
+VkPhysicalDeviceProperties get_physical_device_properties(const VkPhysicalDevice device)
 {
-    std::vector<DevicePropertyFeatureSet> sets(devices.size());
-    for (const auto& device: devices) {
-        VkPhysicalDeviceProperties properties;
-        vkGetPhysicalDeviceProperties(device, &properties);
-        VkPhysicalDeviceFeatures features;
-        vkGetPhysicalDeviceFeatures(device, &features);   
-        sets.emplace_back(device, properties, features);
-    }
-    return sets;
-}    
-
+    VkPhysicalDeviceProperties properties;
+    vkGetPhysicalDeviceProperties(device, &properties);
+    return properties;
+}
+VkPhysicalDeviceFeatures get_physical_device_features(const VkPhysicalDevice device)
+{
+    VkPhysicalDeviceFeatures features;
+    vkGetPhysicalDeviceFeatures(device, &features);   
+    return features;
+}
+    
+PhysicalDevicePropertyFeatureSet get_physical_device_properties_features(const VkPhysicalDevice device)
+{
+    return {get_physical_device_properties(device), get_physical_device_features(device)};
+}
+    
 QueueFamilyIndices find_queue_family_indices(const VkPhysicalDevice& device,
                                              const VkSurfaceKHR& surface,
                                              std::vector<VkQueueFamilyProperties> families)
@@ -178,12 +182,12 @@ std::vector<VkExtensionProperties> get_device_extensions(const VkPhysicalDevice&
 }
 
 bool is_device_extensions_supported(VkPhysicalDevice device,
-                                    const std::vector<const char*> extensions) 
+                                    const std::vector<const char*> needed_extensions) 
 {
     auto actual_extensions = get_device_extensions(device);
 
     std::set<std::string> missing;
-    for (const auto& extension: extensions)
+    for (const auto& extension: needed_extensions)
         missing.insert(std::string(extension));
 
     for (const auto& actual_extension : actual_extensions) {
@@ -192,39 +196,41 @@ bool is_device_extensions_supported(VkPhysicalDevice device,
     return missing.empty();
 }
 
-uint32_t calculate_device_score(DevicePropertyFeatureSet dpf,
+uint32_t calculate_device_score(VkPhysicalDevice device,
                                 const VkSurfaceKHR& surface,
-                                const std::vector<const char*> extensions)
+                                const std::vector<const char*> needed_extensions)
 {
     uint32_t score{0};
-    if (dpf.device == VK_NULL_HANDLE)
+    if (device == VK_NULL_HANDLE)
         return 0;
-    if (dpf.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+    
+    const auto info = get_physical_device_properties_features(device);
+    if (info.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
         score += 1000;
-    if (dpf.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+    if (info.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
         score += 100;
     
-    const auto queue_families = get_queue_families(dpf.device);
-    auto queue_family_indices = find_queue_family_indices(dpf.device, surface, queue_families);
+    const auto queue_families = get_queue_families(device);
+    auto queue_family_indices = find_queue_family_indices(device, surface, queue_families);
     if (!queue_family_indices.is_complete())
         return 0;
-    if (!is_device_extensions_supported(dpf.device, extensions))
+    if (!is_device_extensions_supported(device, needed_extensions))
         return 0;
 
     //TODO get more score paramters...
     return score;
 }
     
-std::vector<DevicePropertyFeatureSet> sort_devices_by_score(
-  const std::vector<DevicePropertyFeatureSet>& devices,
+std::vector<VkPhysicalDevice> sort_devices_by_score(
+  const std::vector<VkPhysicalDevice>& devices,
   const VkSurfaceKHR& surface,
-  const std::vector<const char*> extensions) 
+  const std::vector<const char*> needed_extensions) 
 {
-    std::multimap<uint32_t, DevicePropertyFeatureSet> reverse_sorted;
+    std::multimap<uint32_t, VkPhysicalDevice> reverse_sorted;
     for (const auto& dpf : devices)
-        reverse_sorted.insert({calculate_device_score(dpf, surface, extensions), dpf});
+        reverse_sorted.insert({calculate_device_score(dpf, surface, needed_extensions), dpf});
     
-    std::vector<DevicePropertyFeatureSet> sorted;
+    std::vector<VkPhysicalDevice> sorted;
     for (auto it = reverse_sorted.rbegin(); it != reverse_sorted.rend(); it++)
         sorted.push_back(it->second);
 
@@ -303,26 +309,26 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
         throw std::runtime_error("Failed to find GPUs with Vulkan support!");
     }
 
-    const auto device_property_features = get_physical_device_properties_features(devices);
+    //const auto devices_property_features = get_physical_devices_properties_features(devices);
     std::cout << "Devices in Machine:\n";
-    for (const auto& dpf: device_property_features) {
-        std::cout << "\t" << dpf.properties.deviceName << "\n";
+    for (const auto& device: devices) {
+        auto info = get_physical_device_properties_features(device);
+        std::cout << "\t" << info.properties.deviceName << "\n";
     }
     
-
-    const auto sorted_devices = sort_devices_by_score(device_property_features,
+    const auto sorted_devices = sort_devices_by_score(devices,
                                                       graphics_context->m_window_surface,
                                                       device_extensions);
     if (sorted_devices.empty())
         throw std::runtime_error("Failed to find suitable Device!");
     const auto best_device = sorted_devices[0];
+    const auto best_properties = get_physical_device_properties(best_device);
  
-    std::cout << "Best Device: " << best_device.properties.deviceName << "\n";
-    graphics_context->m_physical_device = best_device.device;
-    
+    std::cout << "Best Device: " << best_properties.deviceName << "\n";
+    graphics_context->m_physical_device = best_device;
 
     /* ===================================================================
-     * Create Logical Device
+     * Create Logical Device from our best device
      */
 
     const auto queue_families = get_queue_families(graphics_context->m_physical_device);
