@@ -581,6 +581,10 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
         get_swap_chain_image_count(swap_chain_info.capabilities);
     std::cout << "Image count in swap chain: " << swap_chain_image_count << std::endl;
     
+    // TODO extract create swap chain to function to avoid name redefinitions
+    // info on what this stuff means:
+    // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Swap_chain
+
     VkSwapchainCreateInfoKHR swap_chain_create_info{};
     swap_chain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swap_chain_create_info.surface = graphics_context->m_window_surface;
@@ -591,7 +595,35 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
     swap_chain_create_info.imageArrayLayers = 1;
     swap_chain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
+    const auto sw_queue_families = get_queue_families(graphics_context->m_physical_device);
+    const auto sw_indices = find_graphics_present_indices(queue_families,
+                                                          graphics_context->m_physical_device,
+                                                          graphics_context->m_window_surface);
 
+    uint32_t queueFamilyIndices[] = {sw_indices.graphics.value(),
+                                     sw_indices.present.value()};
+    if (sw_indices.graphics != sw_indices.present) {
+        swap_chain_create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        swap_chain_create_info.queueFamilyIndexCount = 2;
+        swap_chain_create_info.pQueueFamilyIndices = queueFamilyIndices;
+    }
+    else {
+        swap_chain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        swap_chain_create_info.queueFamilyIndexCount = 0; // Optional
+        swap_chain_create_info.pQueueFamilyIndices = nullptr; // Optional
+    }
+
+    swap_chain_create_info.preTransform = swap_chain_info.capabilities.currentTransform;
+    swap_chain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swap_chain_create_info.presentMode = present_mode.value();
+    swap_chain_create_info.clipped = VK_TRUE;
+    swap_chain_create_info.oldSwapchain = VK_NULL_HANDLE;
+    
+    err = vkCreateSwapchainKHR(graphics_context->m_logical_device,
+                               &swap_chain_create_info, nullptr, 
+                               &graphics_context->m_swap_chain);
+    if (err)
+        throw std::runtime_error("Failed to create swap chain!");
 
     return graphics_context;
 }
@@ -599,6 +631,7 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
 
 GraphicsContext::~GraphicsContext()
 {
+    vkDestroySwapchainKHR(m_logical_device, m_swap_chain, nullptr);
     vkDestroySurfaceKHR(m_instance, m_window_surface, nullptr);
     vkDestroyDevice(m_logical_device, nullptr);
     vkDestroyInstance(m_instance, nullptr);
