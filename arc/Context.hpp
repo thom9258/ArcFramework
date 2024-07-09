@@ -39,7 +39,7 @@ public:
 private:
     VkInstance m_instance;
     VkPhysicalDevice m_physical_device{VK_NULL_HANDLE};
-    VkDevice m_device{VK_NULL_HANDLE};
+    VkDevice m_logical_device{VK_NULL_HANDLE};
     VkQueue m_graphics_queue;
     SDL_Window* m_window{nullptr};
     VkSurfaceKHR m_window_surface;
