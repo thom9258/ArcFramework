@@ -25,19 +25,12 @@ find_package(Vulkan REQUIRED)
 
 set(ARC_SOURCES 
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Context.cpp
-#   ${CMAKE_CURRENT_SOURCE_DIR}/src/error.cpp
-#   ${CMAKE_CURRENT_SOURCE_DIR}/src/window.cpp
-#   ${CMAKE_CURRENT_SOURCE_DIR}/src/math.cpp
-#   ${CMAKE_CURRENT_SOURCE_DIR}/src/shader.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/Shader.cpp
 )
     
 set(ARC_INCLUDES
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/Context.hpp
-#  ${CMAKE_CURRENT_SOURCE_DIR}/arc/sdlgl.hpp
-#  ${CMAKE_CURRENT_SOURCE_DIR}/arc/error.hpp
-#  ${CMAKE_CURRENT_SOURCE_DIR}/arc/shader.hpp
-#  ${CMAKE_CURRENT_SOURCE_DIR}/arc/window.hpp
-#  ${CMAKE_CURRENT_SOURCE_DIR}/arc/math.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/arc/Shader.hpp
 )
 
 add_library(${PROJECT_NAME} STATIC)
