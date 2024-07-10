@@ -24,8 +24,14 @@
 namespace arc {
     
 namespace global {
+
 std::atomic_bool GraphicsContext_created{false};
+
 }
+    
+using Score = uint32_t;
+using ScoredDevice = std::pair<Score, VkPhysicalDevice>;
+
 
 struct PhysicalDevicePropertyFeatureSet {
     VkPhysicalDeviceProperties properties;
@@ -45,7 +51,7 @@ struct QueueFamilyIndices {
         else
             ss << "[Graphics: 'nil', ";
         if (present)
-            ss << "Present: " << *present << " ]";
+            ss << "Present: " << *present << "]";
         else
             ss << "Present: 'nil']";
         return ss.str();
@@ -333,7 +339,7 @@ VkExtent2D get_swap_chain_extent(const VkSurfaceCapabilitiesKHR& capabilities,
     return actualExtent;
 }
 
-uint32_t get_swap_chain_image_count(const VkSurfaceCapabilitiesKHR& capabilities)
+uint32_t get_minimum_swap_chain_image_count(const VkSurfaceCapabilitiesKHR& capabilities)
 {
     auto count = capabilities.minImageCount + 1;
     if (capabilities.maxImageCount > 0 && count > capabilities.maxImageCount) 
@@ -385,31 +391,83 @@ uint32_t calculate_device_score(VkPhysicalDevice device,
     return score;
 }
 
-std::vector<std::pair<uint32_t, VkPhysicalDevice>>   
-sort_devices_by_score(const std::vector<VkPhysicalDevice>& devices,
-                                                    const VkSurfaceKHR& surface,
-                                                    const std::vector<const char*> extensions) 
+std::vector<ScoredDevice> sort_devices_by_score(const std::vector<VkPhysicalDevice>& devices,
+                                                const VkSurfaceKHR& surface,
+                                                const std::vector<const char*> extensions) 
 {
-    std::multimap<uint32_t, VkPhysicalDevice> reverse_sorted;
+    std::multimap<Score, VkPhysicalDevice> reverse_sorted;
     for (const auto& dpf : devices)
         reverse_sorted.insert({calculate_device_score(dpf, surface, extensions), dpf});
     
-    std::vector<std::pair<uint32_t, VkPhysicalDevice>> sorted;
+    std::vector<ScoredDevice> sorted;
     for (auto it = reverse_sorted.rbegin(); it != reverse_sorted.rend(); it++)
         sorted.push_back({it->first, it->second});
 
     return sorted;
 }
 
-std::vector<std::pair<uint32_t, VkPhysicalDevice>>   
-remove_zero_score_devices(const std::vector<std::pair<uint32_t, VkPhysicalDevice>>& score_devices)
+std::vector<ScoredDevice>
+remove_zero_score_devices(const std::vector<ScoredDevice>& score_devices)
 {
-    std::vector<std::pair<uint32_t, VkPhysicalDevice>> nonzero;
+    std::vector<ScoredDevice> nonzero;
     std::copy_if(score_devices.begin(), score_devices.end(), std::back_inserter(nonzero),
                  [] (const auto& score_device) -> bool {
                      return score_device.first > 0;
                  });
     return nonzero;
+}
+    
+std::optional<VkImageView> create_image_view(const VkDevice& device,
+                                             const VkImage image,
+                                             const VkFormat format)
+{
+    VkImageViewCreateInfo create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    create_info.image = image;
+    create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    create_info.format = format;
+    create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    create_info.subresourceRange.baseMipLevel = 0;
+    create_info.subresourceRange.levelCount = 1;
+    create_info.subresourceRange.baseArrayLayer = 0;
+    create_info.subresourceRange.layerCount = 1;
+    
+    VkImageView view;
+    const auto status = vkCreateImageView(device, &create_info, nullptr, &view);
+    if (status != VK_SUCCESS)
+        return {};
+
+    return view;
+}
+
+std::vector<VkImage> get_swap_chain_images(const VkDevice& device,
+                                           const VkSwapchainKHR& swap_chain)
+{
+    uint32_t count{0};
+    vkGetSwapchainImagesKHR(device, swap_chain, &count, nullptr);
+    std::vector<VkImage> images(count);
+    vkGetSwapchainImagesKHR(device, swap_chain, &count, images.data());
+    return images;
+}
+
+
+std::vector<VkImageView> get_swap_chain_image_views(const VkDevice& device,
+                                                    const VkSwapchainKHR& swap_chain,
+                                                    const VkFormat format)
+{
+    std::vector<VkImageView> views;
+    const auto images = get_swap_chain_images(device, swap_chain);
+    for (size_t i = 0; i < images.size(); i++) {
+        const auto view = create_image_view(device, images[i], format);
+        if (!view)
+            throw std::runtime_error("Could not create swap chain image views!");
+        views.push_back(*view);
+    }
+    return views;
 }
 
 std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
@@ -500,7 +558,7 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
 
         std::cout << "\t[Score: " << score_device.first << "]  " 
                   << info.properties.deviceName
-                  << "\t Families: " << render_present_indices.stringify() << std::endl;
+                  << "  Family Indices: " << render_present_indices.stringify() << std::endl;
     }
     
     const auto nonzero_sorted_score_devices = remove_zero_score_devices(sorted_score_devices);
@@ -533,7 +591,6 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
     queue_create_info.pQueuePriorities = &queue_priority;
 
     VkPhysicalDeviceFeatures device_features{};
-
     VkDeviceCreateInfo device_create_info{};
     device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     device_create_info.pQueueCreateInfos = &queue_create_info;
@@ -577,9 +634,9 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
     const auto extent = get_swap_chain_extent(swap_chain_info.capabilities,
                                               graphics_context->m_window);
     
-    const auto swap_chain_image_count =
-        get_swap_chain_image_count(swap_chain_info.capabilities);
-    std::cout << "Image count in swap chain: " << swap_chain_image_count << std::endl;
+    const auto minimum_swap_chain_image_count =
+        get_minimum_swap_chain_image_count(swap_chain_info.capabilities);
+    std::cout << "Wanted image count in swap chain: " << minimum_swap_chain_image_count << std::endl;
     
     // TODO extract create swap chain to function to avoid name redefinitions
     // info on what this stuff means:
@@ -588,7 +645,7 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
     VkSwapchainCreateInfoKHR swap_chain_create_info{};
     swap_chain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swap_chain_create_info.surface = graphics_context->m_window_surface;
-    swap_chain_create_info.minImageCount = swap_chain_image_count;
+    swap_chain_create_info.minImageCount = minimum_swap_chain_image_count;
     swap_chain_create_info.imageFormat = surface_format.value().format;
     swap_chain_create_info.imageColorSpace = surface_format.value().colorSpace;
     swap_chain_create_info.imageExtent = extent;
@@ -624,13 +681,34 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(uint32_t width,
                                &graphics_context->m_swap_chain);
     if (err)
         throw std::runtime_error("Failed to create swap chain!");
+    
 
+    /* ===================================================================
+     * Get Swap Chain Image Views
+     */
+    graphics_context->m_swap_chain_image_views = 
+        get_swap_chain_image_views(graphics_context->m_logical_device,
+                                   graphics_context->m_swap_chain,
+                                   surface_format.value().format);
+    if (graphics_context->m_swap_chain_image_views.size() < minimum_swap_chain_image_count)
+        throw std::runtime_error("Failed to create enough swap chain image views!");
+    
+    /* ===================================================================
+     * Create Graphics Pipeline
+     */
+
+
+
+    std::cout << "GraphicsContext::create() complete!" << std::endl;
     return graphics_context;
 }
     
 
 GraphicsContext::~GraphicsContext()
 {
+    for (auto view : m_swap_chain_image_views)
+        vkDestroyImageView(m_logical_device, view, nullptr);
+
     vkDestroySwapchainKHR(m_logical_device, m_swap_chain, nullptr);
     vkDestroySurfaceKHR(m_instance, m_window_surface, nullptr);
     vkDestroyDevice(m_logical_device, nullptr);

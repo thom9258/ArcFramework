@@ -15,19 +15,21 @@
 #include <vector>
 #include <string>
 
+#include "DeclareNotCopyable.hpp"
+
+
+
 namespace arc {
 
     
-class GraphicsContext {
+class GraphicsContext : protected DeclareNotCopyable
+{
 public:
     using ValidationLayers = std::vector<const char*>;
     using DeviceExtensions = std::vector<const char*>;
+
     GraphicsContext() = default;
     ~GraphicsContext();
-    GraphicsContext(GraphicsContext&&) = delete;
-    GraphicsContext(const GraphicsContext&) = delete;
-    GraphicsContext& operator=(GraphicsContext&&) = delete;
-    GraphicsContext& operator=(const GraphicsContext&) = delete;
 
     [[nodiscard]]
     static std::unique_ptr<GraphicsContext> create(uint32_t width,
@@ -44,6 +46,7 @@ private:
     VkDevice m_logical_device{VK_NULL_HANDLE};
     VkQueue m_graphics_queue;
     VkSwapchainKHR m_swap_chain;
+    std::vector<VkImageView> m_swap_chain_image_views;
 };
 
 
