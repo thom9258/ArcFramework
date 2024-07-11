@@ -1,3 +1,5 @@
+#pragma once
+
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
 //#include <SDL2/SDL_events.h>
@@ -17,12 +19,36 @@
 
 #include "DeclareNotCopyable.hpp"
 
-
-
 namespace arc {
 
+using ShaderBytecode = std::vector<char>;
+
+[[nodiscard]]
+ShaderBytecode read_shader_bytecode(const std::string& filename);
+
+
+class ShaderModule : public DeclareNotCopyable
+{
+public:
+    ShaderModule(const ShaderBytecode& code, const VkDevice& device);
+    ~ShaderModule();
+    const VkShaderModule& get_module() const noexcept;
+private:
+    VkShaderModule m_shader_module;
+    const VkDevice& m_logical_device;
+};
     
-class GraphicsContext : protected DeclareNotCopyable
+class VertexShaderModule : public ShaderModule
+{
+    using ShaderModule::ShaderModule;
+};
+
+class FragmentShaderModule : public ShaderModule
+{
+    using ShaderModule::ShaderModule;
+};
+    
+class GraphicsContext : public DeclareNotCopyable
 {
 public:
     using ValidationLayers = std::vector<const char*>;
@@ -32,10 +58,14 @@ public:
     ~GraphicsContext();
 
     [[nodiscard]]
-    static std::unique_ptr<GraphicsContext> create(uint32_t width,
-                                                   uint32_t height,
+    static std::unique_ptr<GraphicsContext> create(const uint32_t width,
+                                                   const uint32_t height,
                                                    const ValidationLayers validation_layers,
-                                                   const DeviceExtensions device_extensions
+                                                   const DeviceExtensions device_extensions,
+                                                   // TODO: This is disgusting,
+                                                   // Split up shit into multiple stages
+                                                   const ShaderBytecode& vertex_bytecode,
+                                                   const ShaderBytecode& fragment_bytecode
                                                    );
 
 private:
@@ -47,6 +77,10 @@ private:
     VkQueue m_graphics_queue;
     VkSwapchainKHR m_swap_chain;
     std::vector<VkImageView> m_swap_chain_image_views;
+    VkRenderPass m_render_pass;
+    VkPipelineLayout m_graphics_pipeline_layout;
+    VkPipeline m_graphics_pipeline;
+
 };
 
 

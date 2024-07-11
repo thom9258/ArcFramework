@@ -14,11 +14,17 @@ int main(int argc, char** argv) {
     const arc::GraphicsContext::DeviceExtensions device_extensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
+    
+    const auto vertex_bytecode = arc::read_shader_bytecode("../triangle.vert.spv");
+    const auto fragment_bytecode = arc::read_shader_bytecode("../triangle.frag.spv");
 
     auto context = arc::GraphicsContext::create(WIDTH,
                                                 HEIGHT,
                                                 validation_layers,
-                                                device_extensions);
+                                                device_extensions,
+                                                vertex_bytecode,
+                                                fragment_bytecode
+                                                );
 
     bool exit = false;
     SDL_Event event;
