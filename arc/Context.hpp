@@ -68,18 +68,33 @@ public:
                                                    const ShaderBytecode& fragment_bytecode
                                                    );
 
+    void record_command_buffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+
+    void draw_frame();
+
 private:
     SDL_Window* m_window{nullptr};
     VkSurfaceKHR m_window_surface;
     VkInstance m_instance;
     VkPhysicalDevice m_physical_device{VK_NULL_HANDLE};
+    
+    // TODO: is this a good split for when creating logical device?
     VkDevice m_logical_device{VK_NULL_HANDLE};
     VkQueue m_graphics_queue;
     VkSwapchainKHR m_swap_chain;
+    VkExtent2D m_swap_chain_extent;
     std::vector<VkImageView> m_swap_chain_image_views;
     VkRenderPass m_render_pass;
     VkPipelineLayout m_graphics_pipeline_layout;
     VkPipeline m_graphics_pipeline;
+    std::vector<VkFramebuffer> m_swap_chain_framebuffers;
+    VkCommandPool m_command_pool;
+    VkCommandBuffer m_command_buffer;
+    
+    VkSemaphore m_semaphore_image_available;
+    VkSemaphore m_semaphore_rendering_finished;
+    VkFence m_fence_in_flight;
+
 
 };
 

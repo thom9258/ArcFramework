@@ -29,6 +29,10 @@ int main(int argc, char** argv) {
     bool exit = false;
     SDL_Event event;
     while (!exit) {
+        
+        /* =======================================================
+         * Handle Inputs
+         */
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
             case SDL_QUIT:
@@ -57,5 +61,10 @@ int main(int argc, char** argv) {
             } break;
             }
         }
+
+        /* =======================================================
+         * Draw Frame
+         */
+        context->draw_frame();
     }
 }
