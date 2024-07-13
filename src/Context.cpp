@@ -125,7 +125,8 @@ std::vector<const char*> get_available_extensions(SDL_Window* window)
     SDL_Vulkan_GetInstanceExtensions(window, &count, available.data());
     return available;
 }
-   
+    
+  
 VkInstanceCreateInfo create_instance_info(const std::vector<const char*>& extensions,
                                           const VkApplicationInfo* app_info) 
 {
@@ -355,30 +356,6 @@ find_ideal_swap_chain_present_mode(const std::vector<VkPresentModeKHR>& presentm
     return find_swap_chain_present_mode(presentmodes, VK_PRESENT_MODE_MAILBOX_KHR);
 }
     
-
-VkExtent2D get_swap_chain_extent(const VkSurfaceCapabilitiesKHR& capabilities, 
-                                 SDL_Window* window)
-{
-    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
-        return capabilities.currentExtent;
-
-    int width, height;
-    SDL_GetWindowSize(window, &width, &height);
-    
-    VkExtent2D actualExtent = {
-        static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height)
-    };
-    
-    actualExtent.width = std::clamp(actualExtent.width,
-                                    capabilities.minImageExtent.width,
-                                    capabilities.maxImageExtent.width);
-    actualExtent.height = std::clamp(actualExtent.height,
-                                     capabilities.minImageExtent.height,
-                                     capabilities.maxImageExtent.height);
-    return actualExtent;
-}
-
 uint32_t get_minimum_swap_chain_image_count(const VkSurfaceCapabilitiesKHR& capabilities)
 {
     auto count = capabilities.minImageCount + 1;
@@ -555,6 +532,55 @@ create_color_blend_state_info(const VkPipelineColorBlendAttachmentState& attachm
     return color_blending;
 }
 
+/*
+VkExtent2D get_window_size(SDL_Window* window)
+{
+    int width, height;
+    //SDL_GetWindowSize(window, &width, &height);
+    SDL_Vulkan_GetDrawableSize(window, &width, &height);
+    
+    VkExtent2D actualExtent = {
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height)
+    };
+   return actualExtent;
+}
+*/
+
+VkExtent2D scale_extent_to_capabilities(VkExtent2D decired_extent, 
+                                        const VkSurfaceCapabilitiesKHR& capabilities)
+{
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+        return capabilities.currentExtent;
+
+    decired_extent.width = std::clamp(decired_extent.width,
+                                    capabilities.minImageExtent.width,
+                                    capabilities.maxImageExtent.width);
+    decired_extent.height = std::clamp(decired_extent.height,
+                                     capabilities.minImageExtent.height,
+                                     capabilities.maxImageExtent.height);
+    return decired_extent;
+}
+ 
+
+VkExtent2D GraphicsContext::get_window_size()
+{
+    int width, height;
+    //SDL_GetWindowSize(window, &width, &height);
+    vkDeviceWaitIdle(m_logical_device);
+    SDL_Vulkan_GetDrawableSize(m_window, &width, &height);
+    
+    const VkExtent2D decired = {
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height)
+    };
+    const auto info =  get_swap_chain_support_info(m_physical_device, 
+                                                   m_window_surface);
+    const auto actual = scale_extent_to_capabilities(decired, info.capabilities);
+
+   return actual;
+}
+
 void GraphicsContext::record_command_buffer(VkCommandBuffer command_buffer,
                                             uint32_t image_index) 
 {
@@ -588,12 +614,21 @@ void GraphicsContext::record_command_buffer(VkCommandBuffer command_buffer,
     /* ===================================================================
      * Begin Command Buffer
      */
+     const auto swap_chain_info =
+        get_swap_chain_support_info(m_physical_device,
+                                    m_window_surface); 
+    
+    //const auto extent = get_window_size(m_window, swap_chain_info.capabilities);
+    //const auto extent = swap_chain_info.capabilities.currentExtent;
+    //const auto extent = get_window_size(m_window);
+    const auto extent = get_window_size();
+
     VkRenderPassBeginInfo renderpass_info{};
     renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderpass_info.renderPass = m_render_pass;
     renderpass_info.framebuffer = m_swap_chain_framebuffers[image_index];
     renderpass_info.renderArea.offset = {0, 0};
-    renderpass_info.renderArea.extent = m_swap_chain_extent;
+    renderpass_info.renderArea.extent = extent;
 
     VkClearValue clear_color = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
     renderpass_info.clearValueCount = 1;
@@ -605,15 +640,15 @@ void GraphicsContext::record_command_buffer(VkCommandBuffer command_buffer,
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = static_cast<float>(m_swap_chain_extent.width);
-    viewport.height = static_cast<float>(m_swap_chain_extent.height);
+    viewport.width = static_cast<float>(extent.width);
+    viewport.height = static_cast<float>(extent.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(command_buffer, 0, 1, &viewport);
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = m_swap_chain_extent;
+    scissor.extent = extent;
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
     
     const uint32_t vertex_count = 3;
@@ -632,34 +667,34 @@ void GraphicsContext::record_command_buffer(VkCommandBuffer command_buffer,
         throw std::runtime_error("Failed to record command buffer!");
 }
 
-std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
-                                                         const uint32_t height,
-                                                         const ValidationLayers validation_layers,
-                                                         const DeviceExtensions device_extensions,
-                                                         const ShaderBytecode& vertex_bytecode,
-                                                         const ShaderBytecode& fragment_bytecode
-                                                         )
+GraphicsContext::GraphicsContext(const uint32_t width,
+                                 const uint32_t height,
+                                 const ValidationLayers validation_layers,
+                                 const DeviceExtensions device_extensions,
+                                 const ShaderBytecode& vertex_bytecode,
+                                 const ShaderBytecode& fragment_bytecode
+                                 )
 {
     if (global::GraphicsContext_created)
-        throw std::runtime_error("GraphicsContext::create() can only be called once");
+        throw std::runtime_error("Constructor GraphicsContext() can only be called once");
 
     global::GraphicsContext_created = true;
-    auto graphics_context = std::make_unique<GraphicsContext>();
-    
 
     /* ===================================================================
      * Create Instance
      */
 
-    SDL_Init(SDL_INIT_VIDEO);
+    SDL_Init(SDL_INIT_EVERYTHING);
     SDL_Vulkan_LoadLibrary(nullptr);
    
-    graphics_context->m_window = SDL_CreateWindow("Unnamed Window",
-                                                  SDL_WINDOWPOS_UNDEFINED,
-                                                  SDL_WINDOWPOS_UNDEFINED,
-                                                  width,
-                                                  height, 
-                                                  SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
+    m_window = SDL_CreateWindow("Unnamed Window",
+                                SDL_WINDOWPOS_UNDEFINED,
+                                SDL_WINDOWPOS_UNDEFINED,
+                                width,
+                                height, 
+                                SDL_WINDOW_SHOWN 
+                                | SDL_WINDOW_RESIZABLE 
+                                | SDL_WINDOW_VULKAN);
     
     const auto extension_properties = get_available_extension_properties();
     std::cout << "Supported Extensions:\n";
@@ -668,7 +703,7 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
     }
 
     const auto app_info = create_app_info("noname");
-    const auto extensions = get_available_extensions(graphics_context->m_window);
+    const auto extensions = get_available_extensions(m_window);
     auto instance_info = create_instance_info(extensions, &app_info);
     
     std::cout << "Provided Validation Layers:\n";
@@ -685,7 +720,7 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
     }
     
     VkResult err{VK_ERROR_UNKNOWN};
-    err = vkCreateInstance(&instance_info, nullptr, &graphics_context->m_instance);
+    err = vkCreateInstance(&instance_info, nullptr, &m_instance);
     if (err)
         throw std::runtime_error("vkCreateInstance() returned non-ok");
     
@@ -693,21 +728,21 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
      * Create Window Surface as the Main Rendertarget
      */
 
-    SDL_Vulkan_CreateSurface(graphics_context->m_window,
-                             graphics_context->m_instance, 
-                             &graphics_context->m_window_surface);
+    SDL_Vulkan_CreateSurface(m_window,
+                             m_instance, 
+                             &m_window_surface);
 
     /* ===================================================================
      * Find Best Physical Device for our Instance & Window
      */
 
-    const auto devices = get_available_physical_devices(graphics_context->m_instance);
+    const auto devices = get_available_physical_devices(m_instance);
     if (devices.empty()) {
         throw std::runtime_error("Failed to find GPUs with Vulkan support!");
     }
 
     const auto sorted_score_devices = sort_devices_by_score(devices,
-                                                      graphics_context->m_window_surface,
+                                                      m_window_surface,
                                                       device_extensions);
     if (sorted_score_devices.empty())
         throw std::runtime_error("Failed to find suitable Device!");
@@ -718,7 +753,7 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
         const auto queue_families = get_queue_families(score_device.second);
         auto render_present_indices = find_graphics_present_indices(queue_families,
                                     score_device.second,
-                                    graphics_context->m_window_surface);
+                                    m_window_surface);
 
         std::cout << "\t[Score: " << score_device.first << "]  " 
                   << info.properties.deviceName
@@ -731,18 +766,17 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
 
     const auto best_device = sorted_score_devices[0].second;
     const auto best_properties = get_physical_device_properties(best_device);
- 
     std::cout << "Best Device: " << best_properties.deviceName << "\n";
-    graphics_context->m_physical_device = best_device;
+    m_physical_device = best_device;
 
     /* ===================================================================
      * Create Logical Device from our best device
      */
 
-    const auto queue_families = get_queue_families(graphics_context->m_physical_device);
+    const auto queue_families = get_queue_families(m_physical_device);
     auto render_present_indices = find_graphics_present_indices(queue_families,
-                                    graphics_context->m_physical_device,
-                                    graphics_context->m_window_surface);
+                                    m_physical_device,
+                                    m_window_surface);
 
     if (!render_present_indices.is_complete())
         throw std::runtime_error("Failed to find complete queue family in device!");
@@ -764,109 +798,30 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
     device_create_info.enabledExtensionCount = static_cast<uint32_t>(device_extensions.size());
     device_create_info.ppEnabledExtensionNames = device_extensions.data();
 
-    err = vkCreateDevice(graphics_context->m_physical_device,
+    err = vkCreateDevice(m_physical_device,
                          &device_create_info,
                          nullptr,
-                         &graphics_context->m_logical_device);
+                         &m_logical_device);
     if (err) {
         throw std::runtime_error("failed to create logical device!");
     }
     
-    vkGetDeviceQueue(graphics_context->m_logical_device, 
+    vkGetDeviceQueue(m_logical_device, 
                      render_present_indices.graphics.value(),
                      0,
-                     &graphics_context->m_graphics_queue);
+                     &m_graphics_queue);
     
     /* ===================================================================
      * Create Swap Chain
      */
-    const auto swap_chain_info =
-        get_swap_chain_support_info(graphics_context->m_physical_device,
-                                    graphics_context->m_window_surface); 
-    
-    auto surface_format = find_ideal_swap_chain_surface_format(swap_chain_info.formats);
-    if (!surface_format) {
-        if (swap_chain_info.formats.empty())
-            throw std::runtime_error("No surface formats exist on physical device!");
-        surface_format = swap_chain_info.formats[0];
-    }
-    auto present_mode = find_ideal_swap_chain_present_mode(swap_chain_info.present_modes);
-    if (!present_mode) {
-        present_mode = get_default_swap_chain_present_mode();
-    }
-    
-    graphics_context->m_swap_chain_extent = get_swap_chain_extent(swap_chain_info.capabilities,
-                                                                  graphics_context->m_window);
-    
-    const auto minimum_swap_chain_image_count =
-        get_minimum_swap_chain_image_count(swap_chain_info.capabilities);
-    std::cout << "Wanted image count in swap chain: " << minimum_swap_chain_image_count << std::endl;
-    
-    // TODO extract create swap chain to function to avoid name redefinitions
-    // info on what this stuff means:
-    // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Swap_chain
-
-    VkSwapchainCreateInfoKHR swap_chain_create_info{};
-    swap_chain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swap_chain_create_info.surface = graphics_context->m_window_surface;
-    swap_chain_create_info.minImageCount = minimum_swap_chain_image_count;
-    swap_chain_create_info.imageFormat = surface_format.value().format;
-    swap_chain_create_info.imageColorSpace = surface_format.value().colorSpace;
-    swap_chain_create_info.imageExtent = graphics_context->m_swap_chain_extent;
-    swap_chain_create_info.imageArrayLayers = 1;
-    swap_chain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-    const auto sw_queue_families = get_queue_families(graphics_context->m_physical_device);
-    const auto sw_indices = find_graphics_present_indices(queue_families,
-                                                          graphics_context->m_physical_device,
-                                                          graphics_context->m_window_surface);
-
-    uint32_t queueFamilyIndices[] = {sw_indices.graphics.value(),
-                                     sw_indices.present.value()};
-    if (sw_indices.graphics != sw_indices.present) {
-        swap_chain_create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        swap_chain_create_info.queueFamilyIndexCount = 2;
-        swap_chain_create_info.pQueueFamilyIndices = queueFamilyIndices;
-    }
-    else {
-        swap_chain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        swap_chain_create_info.queueFamilyIndexCount = 0; // Optional
-        swap_chain_create_info.pQueueFamilyIndices = nullptr; // Optional
-    }
-
-    swap_chain_create_info.preTransform = swap_chain_info.capabilities.currentTransform;
-    swap_chain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swap_chain_create_info.presentMode = present_mode.value();
-    swap_chain_create_info.clipped = VK_TRUE;
-    swap_chain_create_info.oldSwapchain = VK_NULL_HANDLE;
-    
-    err = vkCreateSwapchainKHR(graphics_context->m_logical_device,
-                               &swap_chain_create_info, nullptr, 
-                               &graphics_context->m_swap_chain);
-    if (err)
-        throw std::runtime_error("Failed to create swap chain!");
-    
-
-    /* ===================================================================
-     * Get Swap Chain Image Views
-     */
-    graphics_context->m_swap_chain_image_views = 
-        get_swap_chain_image_views(graphics_context->m_logical_device,
-                                   graphics_context->m_swap_chain,
-                                   surface_format.value().format);
-    if (graphics_context->m_swap_chain_image_views.size() < minimum_swap_chain_image_count)
-        throw std::runtime_error("Failed to create enough swap chain image views!");
-
-    std::cout << "Actual image count in swap chain: " 
-              << graphics_context->m_swap_chain_image_views.size()
-              << std::endl;
-    
+    create_swap_chain(width, height);
+   
     /* ===================================================================
      * Create Shader Stages
      */
     
     const auto vertex = VertexShaderModule(vertex_bytecode,
-                                           graphics_context->m_logical_device);
+                                           m_logical_device);
     
     VkPipelineShaderStageCreateInfo vertex_create_info{};
     vertex_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -875,7 +830,7 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
     vertex_create_info.pName = "main";
 
     const auto fragment = VertexShaderModule(fragment_bytecode,
-                                             graphics_context->m_logical_device);
+                                             m_logical_device);
 
     VkPipelineShaderStageCreateInfo fragment_create_info{};
     fragment_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -916,16 +871,22 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
     /* ===================================================================
      * Create Pipeline Viewport
      */
+    const auto swap_chain_info = get_swap_chain_support_info(m_physical_device,
+                                                             m_window_surface); 
+
+    //const auto extent = get_window_size(m_window, swap_chain_info.capabilities);
+    //const auto extent = get_window_size(m_window);
+    const auto extent = get_window_size();
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = graphics_context->m_swap_chain_extent;
+    scissor.extent = extent;
 
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)graphics_context->m_swap_chain_extent.width;
-    viewport.height = (float)graphics_context->m_swap_chain_extent.height;
+    viewport.width = (float)extent.width;
+    viewport.height = (float)extent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
@@ -984,10 +945,10 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
     //pipeline_layout_info.pColorBlendState = &color_blending;
     pipeline_layout_info.pushConstantRangeCount = 0; // Optional
     pipeline_layout_info.pPushConstantRanges = nullptr; // Optional
-    auto status = vkCreatePipelineLayout(graphics_context->m_logical_device,
+    auto status = vkCreatePipelineLayout(m_logical_device,
                                          &pipeline_layout_info,
                                          nullptr,
-                                         &graphics_context->m_graphics_pipeline_layout);
+                                         &m_graphics_pipeline_layout);
     if (status != VK_SUCCESS) {
         throw std::runtime_error("failed to create pipeline layout!");
     }
@@ -997,7 +958,7 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
      */
 
     VkAttachmentDescription color_attachment{};
-    color_attachment.format = surface_format.value().format;
+    color_attachment.format = m_swap_chain_surface_format.format;
     color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
     color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1032,10 +993,10 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
     render_pass_info.dependencyCount = 1;
     render_pass_info.pDependencies = &dependency;
 
-    status = vkCreateRenderPass(graphics_context->m_logical_device,
+    status = vkCreateRenderPass(m_logical_device,
                                 &render_pass_info,
                                 nullptr,
-                                &graphics_context->m_render_pass);
+                                &m_render_pass);
 
     if (status != VK_SUCCESS)
         throw std::runtime_error("Failed to create render pass!");
@@ -1057,84 +1018,61 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
     pipeline_info.pDepthStencilState = nullptr; // Optional
     pipeline_info.pColorBlendState = &color_blending;
     pipeline_info.pDynamicState = &dynamic_state;
-    pipeline_info.layout = graphics_context->m_graphics_pipeline_layout;
-    pipeline_info.renderPass = graphics_context->m_render_pass;
+    pipeline_info.layout = m_graphics_pipeline_layout;
+    pipeline_info.renderPass = m_render_pass;
     pipeline_info.subpass = 0;
     pipeline_info.basePipelineHandle = VK_NULL_HANDLE; // Optional
     pipeline_info.basePipelineIndex = -1; // Optional
     
-    status = vkCreateGraphicsPipelines(graphics_context->m_logical_device,
+    status = vkCreateGraphicsPipelines(m_logical_device,
                                        VK_NULL_HANDLE,
                                        1,
                                        &pipeline_info,
                                        nullptr,
-                                       &graphics_context->m_graphics_pipeline);
+                                       &m_graphics_pipeline);
 
     if (status  != VK_SUCCESS)
         throw std::runtime_error("Failed to create graphics pipeline!");
     
 
-    /* ===================================================================
-     * Create Swap Chain Framebuffers
-     */
-    const auto framebuffer_size = graphics_context->m_swap_chain_image_views.size();
-    graphics_context->m_swap_chain_framebuffers.resize(framebuffer_size);
-    for (size_t i = 0; i < framebuffer_size; i++) {
-        VkImageView attachments[] = {graphics_context->m_swap_chain_image_views[i]};
-        VkFramebufferCreateInfo framebuffer_info{};
-        framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebuffer_info.renderPass = graphics_context->m_render_pass;
-        framebuffer_info.attachmentCount = 1;
-        framebuffer_info.pAttachments = attachments;
-        framebuffer_info.width = graphics_context->m_swap_chain_extent.width;
-        framebuffer_info.height = graphics_context->m_swap_chain_extent.height;
-        framebuffer_info.layers = 1;
-        status = vkCreateFramebuffer(graphics_context->m_logical_device,
-                                    &framebuffer_info,
-                                    nullptr,
-                                    &graphics_context->m_swap_chain_framebuffers[i]);
-
-        if (status != VK_SUCCESS)
-            throw std::runtime_error("Failed to create framebuffer["
-                                     + std::to_string(i) + "]!");
-    }
-    
-    std::cout << "Created "
-              <<  graphics_context->m_swap_chain_framebuffers.size()
-              << " framebuffers" 
-              << std::endl;
-    
+   /* ===================================================================
+    * Create Swap Chain Framebuffers
+    */
+    create_swap_chain_framebuffers(width, height);
+   
     /* ===================================================================
      * Create Command Pool
      */
     { //NOTE: We add a scope here to avoid variable renaming
-        const auto queue_families = get_queue_families(graphics_context->m_physical_device);
+        const auto queue_families = get_queue_families(m_physical_device);
         auto queue_families_indices =
             find_graphics_present_indices(queue_families,
-                                        graphics_context->m_physical_device,
-                                        graphics_context->m_window_surface);
+                                        m_physical_device,
+                                        m_window_surface);
 
         VkCommandPoolCreateInfo pool_info{};
         pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         pool_info.queueFamilyIndex = queue_families_indices.graphics.value();
 
-        const auto status = vkCreateCommandPool(graphics_context->m_logical_device,
+        const auto status = vkCreateCommandPool(m_logical_device,
                                                 &pool_info,
                                                 nullptr,
-                                                &graphics_context->m_command_pool);
+                                                &m_command_pool);
         if (status != VK_SUCCESS)
             throw std::runtime_error("Failed to create command pool!");
     }
 
     
     /* ===================================================================
-     * Create Command Buffer
+     * Create Command Buffers
      */
+    
+    m_command_buffers.resize(m_max_frames_in_flight);
 
     VkCommandBufferAllocateInfo alloc_info{};
     alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    alloc_info.commandPool = graphics_context->m_command_pool;
+    alloc_info.commandPool = m_command_pool;
     alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     /*
     VK_COMMAND_BUFFER_LEVEL_PRIMARY:
@@ -1142,10 +1080,10 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
     VK_COMMAND_BUFFER_LEVEL_SECONDARY:
     Cannot be submitted directly, but can be called from primary command buffers.
     */
-    alloc_info.commandBufferCount = 1;
-    status = vkAllocateCommandBuffers(graphics_context->m_logical_device,
+    alloc_info.commandBufferCount = static_cast<uint32_t>(m_command_buffers.size());
+    status = vkAllocateCommandBuffers(m_logical_device,
                                       &alloc_info,
-                                      &graphics_context->m_command_buffer);
+                                      m_command_buffers.data());
     if (status  != VK_SUCCESS)
         throw std::runtime_error("Failed to allocate command buffers!");
     
@@ -1153,80 +1091,111 @@ std::unique_ptr<GraphicsContext> GraphicsContext::create(const uint32_t width,
      * Create Sync Objects
      */
 
+    m_semaphores_image_available.resize(m_max_frames_in_flight);
+    m_semaphores_rendering_finished.resize(m_max_frames_in_flight);
+    m_fences_in_flight.resize(m_max_frames_in_flight);
+
     VkSemaphoreCreateInfo semaphore_info{};
     semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    
-
-    status = vkCreateSemaphore(graphics_context->m_logical_device,
-                               &semaphore_info,
-                               nullptr,
-                               &graphics_context->m_semaphore_image_available);
-    if (status != VK_SUCCESS)
-        throw std::runtime_error("failed to create image available semaphore!");
-    
-    status = vkCreateSemaphore(graphics_context->m_logical_device,
-                               &semaphore_info,
-                               nullptr,
-                               &graphics_context->m_semaphore_rendering_finished);
-    if (status != VK_SUCCESS)
-        throw std::runtime_error("failed to create rendering finished semaphore!");
 
     VkFenceCreateInfo fence_info{};
     fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    status = vkCreateFence(graphics_context->m_logical_device,
-                           &fence_info,
-                           nullptr,
-                           &graphics_context->m_fence_in_flight);
-    if (status != VK_SUCCESS)
-        throw std::runtime_error("failed to create semaphores!");
+    for (size_t i = 0; i < m_max_frames_in_flight; i++) {
+        status = vkCreateSemaphore(m_logical_device,
+                                   &semaphore_info,
+                                   nullptr,
+                                   &m_semaphores_image_available[i]);
+        if (status != VK_SUCCESS)
+            throw std::runtime_error("failed to create image available semaphore["
+                                     + std::to_string(i) + "]");
+        
+        status = vkCreateSemaphore(m_logical_device,
+                                   &semaphore_info,
+                                   nullptr,
+                                   &m_semaphores_rendering_finished[i]);
+        if (status != VK_SUCCESS)
+            throw std::runtime_error("failed to create rendering finished semaphore["
+                                     + std::to_string(i) + "]");
 
+        status = vkCreateFence(m_logical_device,
+                            &fence_info,
+                            nullptr,
+                            &m_fences_in_flight[i]);
+        if (status != VK_SUCCESS)
+            throw std::runtime_error("failed to create fence in flight ["
+                                     + std::to_string(i) + "]");
+    }
 
+    if (m_swap_chain_framebuffer_resized) {
+        recreate_swap_chain();
+        return;
+    } 
 
-    std::cout << "GraphicsContext::create() complete!" << std::endl;
-    return graphics_context;
+    std::cout << "Constructor GraphicsContext() complete!" << std::endl;
 }
 
+void GraphicsContext::window_resized_event()
+{
+    m_swap_chain_framebuffer_resized = true;
+}
    
 void GraphicsContext::draw_frame()
 {
     vkWaitForFences(m_logical_device,
                     1,
-                    &m_fence_in_flight,
+                    &m_fences_in_flight[m_flight_frame],
                     VK_TRUE,
                     UINT64_MAX);
-
-    vkResetFences(m_logical_device, 1, &m_fence_in_flight);
+    
+    if (m_swap_chain_framebuffer_resized) {
+        recreate_swap_chain();
+        return;
+    }
 
     uint32_t image_index;
-    vkAcquireNextImageKHR(m_logical_device,
-                          m_swap_chain,
-                          UINT64_MAX,
-                          m_semaphore_image_available,
-                          VK_NULL_HANDLE,
-                          &image_index);
+    auto status = vkAcquireNextImageKHR(m_logical_device,
+                                        m_swap_chain,
+                                        UINT64_MAX,
+                                        m_semaphores_image_available[m_flight_frame],
+                                        VK_NULL_HANDLE,
+                                        &image_index);
 
-    vkResetCommandBuffer(m_command_buffer, 0);
-    record_command_buffer(m_command_buffer, image_index);
+    if (status == VK_ERROR_OUT_OF_DATE_KHR || m_swap_chain_framebuffer_resized) {
+        recreate_swap_chain();
+        return;
+    } 
+    else if (status != VK_SUCCESS && status != VK_SUBOPTIMAL_KHR)
+        throw std::runtime_error("Failed to acquire swap chain image!");
+    
+    // Reset fences now we could get next image to draw on
+    vkResetFences(m_logical_device, 1, &m_fences_in_flight[m_flight_frame]);
+
+    vkResetCommandBuffer(m_command_buffers[m_flight_frame], 0);
+    record_command_buffer(m_command_buffers[m_flight_frame], image_index);
 
     VkSubmitInfo submit_info{};
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    std::vector<VkSemaphore> waitSemaphores = {m_semaphore_image_available};
+    std::vector<VkSemaphore> waitSemaphores = {m_semaphores_image_available[m_flight_frame]};
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
     submit_info.waitSemaphoreCount = waitSemaphores.size();
     submit_info.pWaitSemaphores = waitSemaphores.data();
     submit_info.pWaitDstStageMask = waitStages;
     submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_command_buffer;
+    submit_info.pCommandBuffers = &m_command_buffers[m_flight_frame];
     
-    std::vector<VkSemaphore> signalSemaphores = {m_semaphore_rendering_finished};
+    std::vector<VkSemaphore> signalSemaphores =
+        {m_semaphores_rendering_finished[m_flight_frame]};
     submit_info.signalSemaphoreCount = signalSemaphores.size();
     submit_info.pSignalSemaphores = signalSemaphores.data();
 
-    auto status = vkQueueSubmit(m_graphics_queue, 1, &submit_info, m_fence_in_flight); 
+    status = vkQueueSubmit(m_graphics_queue,
+                           1,
+                           &submit_info,
+                           m_fences_in_flight[m_flight_frame]); 
     if (status != VK_SUCCESS)
         throw std::runtime_error("Failed to submit draw command buffer!");
     
@@ -1243,28 +1212,183 @@ void GraphicsContext::draw_frame()
     present_info.pImageIndices = &image_index;
     present_info.pResults = nullptr; // Optional
 
-    vkQueuePresentKHR(m_graphics_queue, &present_info);
+    status = vkQueuePresentKHR(m_graphics_queue, &present_info);
+    if (status == VK_ERROR_OUT_OF_DATE_KHR || m_swap_chain_framebuffer_resized) {
+        recreate_swap_chain();
+        return;
+    } 
+    else if (status != VK_SUCCESS && status != VK_SUBOPTIMAL_KHR)
+        throw std::runtime_error("Failed to acquire swap chain image!");
 
+    m_flight_frame = (m_flight_frame + 1) % m_max_frames_in_flight;
+}
+
+
+void GraphicsContext::destroy_swap_chain() {
+    for (auto& framebuffer: m_swap_chain_framebuffers)
+        vkDestroyFramebuffer(m_logical_device, framebuffer, nullptr);
+
+    for (auto& view: m_swap_chain_image_views)
+        vkDestroyImageView(m_logical_device, view, nullptr);
+
+    vkDestroySwapchainKHR(m_logical_device, m_swap_chain, nullptr);
+}
+
+
+void GraphicsContext::create_swap_chain(const uint32_t width,
+                                        const uint32_t height)
+{
+    /* ===================================================================
+     * Create Swap Chain
+     */
+    const auto swap_chain_info =
+        get_swap_chain_support_info(m_physical_device,
+                                    m_window_surface); 
+    
+    auto ideal_surface_format = find_ideal_swap_chain_surface_format(swap_chain_info.formats);
+    if (ideal_surface_format) {
+        m_swap_chain_surface_format = ideal_surface_format.value();
+    }
+    else {
+        if (swap_chain_info.formats.empty())
+            throw std::runtime_error("No surface formats exist on physical device!");
+        m_swap_chain_surface_format = swap_chain_info.formats[0];
+    }
+
+    auto present_mode = find_ideal_swap_chain_present_mode(swap_chain_info.present_modes);
+    if (!present_mode) {
+        present_mode = get_default_swap_chain_present_mode();
+    }
+    
+    const auto minimum_swap_chain_image_count =
+        get_minimum_swap_chain_image_count(swap_chain_info.capabilities);
+    std::cout << "Wanted image count in swap chain: " << minimum_swap_chain_image_count << std::endl;
+    
+    // TODO extract create swap chain to function to avoid name redefinitions
+    // info on what this stuff means:
+    // https://vulkan-tutorial.com/en/Drawing_a_triangle/Presentation/Swap_chain
+
+    VkSwapchainCreateInfoKHR swap_chain_create_info{};
+    swap_chain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swap_chain_create_info.surface = m_window_surface;
+    swap_chain_create_info.minImageCount = minimum_swap_chain_image_count;
+    swap_chain_create_info.imageFormat = m_swap_chain_surface_format.format;
+    swap_chain_create_info.imageColorSpace = m_swap_chain_surface_format.colorSpace;
+    swap_chain_create_info.imageExtent = {width, height};
+    swap_chain_create_info.imageArrayLayers = 1;
+    swap_chain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    const auto queue_families = get_queue_families(m_physical_device);
+    const auto indices = find_graphics_present_indices(queue_families,
+                                                       m_physical_device,
+                                                       m_window_surface);
+
+    uint32_t queueFamilyIndices[] = {indices.graphics.value(),
+                                     indices.present.value()};
+    if (indices.graphics != indices.present) {
+        swap_chain_create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        swap_chain_create_info.queueFamilyIndexCount = 2;
+        swap_chain_create_info.pQueueFamilyIndices = queueFamilyIndices;
+    }
+    else {
+        swap_chain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        swap_chain_create_info.queueFamilyIndexCount = 0; // Optional
+        swap_chain_create_info.pQueueFamilyIndices = nullptr; // Optional
+    }
+
+    swap_chain_create_info.preTransform = swap_chain_info.capabilities.currentTransform;
+    swap_chain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swap_chain_create_info.presentMode = present_mode.value();
+    swap_chain_create_info.clipped = VK_TRUE;
+    swap_chain_create_info.oldSwapchain = VK_NULL_HANDLE;
+    
+    auto status = vkCreateSwapchainKHR(m_logical_device,
+                                       &swap_chain_create_info, nullptr, 
+                                       &m_swap_chain);
+    if (status != VK_SUCCESS)
+        throw std::runtime_error("Failed to create swap chain!");
+    
+    /* ===================================================================
+     * Get Swap Chain Image Views
+     */
+    m_swap_chain_image_views = 
+        get_swap_chain_image_views(m_logical_device,
+                                   m_swap_chain,
+                                   m_swap_chain_surface_format.format);
+    if (m_swap_chain_image_views.size() < minimum_swap_chain_image_count)
+        throw std::runtime_error("Failed to create enough swap chain image views!");
+
+    std::cout << "Actual image count in swap chain: " 
+              << m_swap_chain_image_views.size()
+              << std::endl;
+}
+
+void GraphicsContext::create_swap_chain_framebuffers(const uint32_t width,
+                                                     const uint32_t height)
+{
+     /* ===================================================================
+     * Create Swap Chain Framebuffers
+     */
+    const auto framebuffer_size = m_swap_chain_image_views.size();
+    m_swap_chain_framebuffers.resize(framebuffer_size);
+    for (size_t i = 0; i < framebuffer_size; i++) {
+        VkImageView attachments[] = {m_swap_chain_image_views[i]};
+        VkFramebufferCreateInfo framebuffer_info{};
+        framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebuffer_info.renderPass = m_render_pass;
+        framebuffer_info.attachmentCount = 1;
+        framebuffer_info.pAttachments = attachments;
+        framebuffer_info.width = width;
+        framebuffer_info.height = height;
+        framebuffer_info.layers = 1;
+        auto status = vkCreateFramebuffer(m_logical_device,
+                                          &framebuffer_info,
+                                          nullptr,
+                                          &m_swap_chain_framebuffers[i]);
+
+        if (status != VK_SUCCESS)
+            throw std::runtime_error("Failed to create framebuffer["
+                                     + std::to_string(i) + "]!");
+    }
+    
+    std::cout << "Created "
+              <<  m_swap_chain_framebuffers.size()
+              << " framebuffers" 
+              << std::endl;
+}
+
+void GraphicsContext::recreate_swap_chain() 
+{
+    vkDeviceWaitIdle(m_logical_device);
+    destroy_swap_chain();
+    const auto info = get_swap_chain_support_info(m_physical_device, 
+                                                  m_window_surface);
+
+    //auto extent = get_window_size(m_window);
+    //extent = get_window_size(extent, info.capabilities);
+    auto extent = get_window_size();
+    create_swap_chain(extent.width, extent.height);
+    create_swap_chain_framebuffers(extent.width, extent.height);
+    m_swap_chain_framebuffer_resized = false;
 }
 
 GraphicsContext::~GraphicsContext()
 {
     vkDeviceWaitIdle(m_logical_device);
-    vkDestroySemaphore(m_logical_device, m_semaphore_image_available, nullptr);
-    vkDestroySemaphore(m_logical_device, m_semaphore_rendering_finished, nullptr);
-    vkDestroyFence(m_logical_device, m_fence_in_flight, nullptr);
+    
+    destroy_swap_chain();
 
+    for (uint32_t i = 0; i < m_max_frames_in_flight; i++) {
+        vkDestroySemaphore(m_logical_device, m_semaphores_image_available[i], nullptr);
+        vkDestroySemaphore(m_logical_device, m_semaphores_rendering_finished[i], nullptr);
+        vkDestroyFence(m_logical_device, m_fences_in_flight[i], nullptr);
+    }
     vkDestroyCommandPool(m_logical_device, m_command_pool, nullptr);
-    for (auto framebuffer : m_swap_chain_framebuffers)
-        vkDestroyFramebuffer(m_logical_device, framebuffer, nullptr);
 
     vkDestroyPipeline(m_logical_device, m_graphics_pipeline, nullptr);
     vkDestroyPipelineLayout(m_logical_device, m_graphics_pipeline_layout, nullptr);
     vkDestroyRenderPass(m_logical_device, m_render_pass, nullptr);
-    for (auto view : m_swap_chain_image_views)
-        vkDestroyImageView(m_logical_device, view, nullptr);
 
-    vkDestroySwapchainKHR(m_logical_device, m_swap_chain, nullptr);
     vkDestroySurfaceKHR(m_instance, m_window_surface, nullptr);
     vkDestroyDevice(m_logical_device, nullptr);
     vkDestroyInstance(m_instance, nullptr);

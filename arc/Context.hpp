@@ -54,23 +54,26 @@ public:
     using ValidationLayers = std::vector<const char*>;
     using DeviceExtensions = std::vector<const char*>;
 
-    GraphicsContext() = default;
     ~GraphicsContext();
+    GraphicsContext(const uint32_t width,
+                    const uint32_t height,
+                    const ValidationLayers validation_layers,
+                    const DeviceExtensions device_extensions,
+                    // TODO: This is disgusting,
+                    // Split up shit into multiple stages
+                    const ShaderBytecode& vertex_bytecode,
+                    const ShaderBytecode& fragment_bytecode
+                    );
 
-    [[nodiscard]]
-    static std::unique_ptr<GraphicsContext> create(const uint32_t width,
-                                                   const uint32_t height,
-                                                   const ValidationLayers validation_layers,
-                                                   const DeviceExtensions device_extensions,
-                                                   // TODO: This is disgusting,
-                                                   // Split up shit into multiple stages
-                                                   const ShaderBytecode& vertex_bytecode,
-                                                   const ShaderBytecode& fragment_bytecode
-                                                   );
-
+    VkExtent2D get_window_size();
+    void window_resized_event();
+    void recreate_swap_chain();
+    void create_swap_chain(const uint32_t width, const uint32_t height);
+    void create_swap_chain_framebuffers(const uint32_t width, const uint32_t height);
+    void destroy_swap_chain();
     void record_command_buffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
-
     void draw_frame();
+
 
 private:
     SDL_Window* m_window{nullptr};
@@ -82,19 +85,21 @@ private:
     VkDevice m_logical_device{VK_NULL_HANDLE};
     VkQueue m_graphics_queue;
     VkSwapchainKHR m_swap_chain;
-    VkExtent2D m_swap_chain_extent;
+    VkSurfaceFormatKHR m_swap_chain_surface_format;
     std::vector<VkImageView> m_swap_chain_image_views;
     VkRenderPass m_render_pass;
     VkPipelineLayout m_graphics_pipeline_layout;
     VkPipeline m_graphics_pipeline;
     std::vector<VkFramebuffer> m_swap_chain_framebuffers;
+    bool m_swap_chain_framebuffer_resized{false};
     VkCommandPool m_command_pool;
-    VkCommandBuffer m_command_buffer;
     
-    VkSemaphore m_semaphore_image_available;
-    VkSemaphore m_semaphore_rendering_finished;
-    VkFence m_fence_in_flight;
-
+    const uint32_t m_max_frames_in_flight{2};
+    std::vector<VkCommandBuffer> m_command_buffers;
+    std::vector<VkSemaphore> m_semaphores_image_available;
+    std::vector<VkSemaphore> m_semaphores_rendering_finished;
+    std::vector<VkFence> m_fences_in_flight;
+    uint32_t m_flight_frame = 0;
 
 };
 
