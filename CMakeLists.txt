@@ -25,10 +25,12 @@ find_package(Vulkan REQUIRED)
 
 set(ARC_SOURCES 
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Context.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/VertexBuffer.cpp
 )
     
 set(ARC_INCLUDES
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/Context.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/arc/VertexBuffer.hpp
 )
 
 add_library(${PROJECT_NAME} STATIC)

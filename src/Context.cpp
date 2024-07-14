@@ -11,10 +11,6 @@
 #include <cstdint>
 #include <limits>
 
-#ifndef UNREFERENCED
-#define UNREFERENCED(param) void(param)
-#endif
-
 // https://github.com/AndreVallestero/sdl-vulkan-tutorial/blob/master/hello-triangle/main.cpp
 // https://vulkan-tutorial.com/en/Drawing_a_triangle/Setup/Instance
 
@@ -30,7 +26,7 @@ std::atomic_bool GraphicsContext_created{false};
 
 }
     
-
+   
 ShaderBytecode read_shader_bytecode(const std::string& filename) 
 {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
@@ -105,6 +101,7 @@ struct SwapChainSupportInfo {
 };
 
 
+[[nodiscard]]
 VkApplicationInfo create_app_info(const char* appname) 
 {
     VkApplicationInfo info{};
@@ -117,6 +114,7 @@ VkApplicationInfo create_app_info(const char* appname)
     return info;
 }
     
+[[nodiscard]]
 std::vector<const char*> get_available_extensions(SDL_Window* window)
 {
     uint32_t count{0};
@@ -127,6 +125,7 @@ std::vector<const char*> get_available_extensions(SDL_Window* window)
 }
     
   
+[[nodiscard]]
 VkInstanceCreateInfo create_instance_info(const std::vector<const char*>& extensions,
                                           const VkApplicationInfo* app_info) 
 {
@@ -139,6 +138,7 @@ VkInstanceCreateInfo create_instance_info(const std::vector<const char*>& extens
     return info;
 }
     
+[[nodiscard]]
 std::vector<VkExtensionProperties> get_available_extension_properties()
 {
     uint32_t count{0};
@@ -148,6 +148,7 @@ std::vector<VkExtensionProperties> get_available_extension_properties()
     return available;
 }
     
+[[nodiscard]]
 std::vector<VkLayerProperties> get_available_validation_layers()
 {
     uint32_t count{0};
@@ -158,6 +159,7 @@ std::vector<VkLayerProperties> get_available_validation_layers()
 }
     
     
+[[nodiscard]]
 bool is_validation_layers_supported(const GraphicsContext::ValidationLayers layers)
 {
     const auto available_layers = get_available_validation_layers();
@@ -185,6 +187,7 @@ bool is_validation_layers_supported(const GraphicsContext::ValidationLayers laye
     return true;
 }
     
+[[nodiscard]]
 std::vector<VkPhysicalDevice> get_available_physical_devices(const VkInstance& instance)
 {
     uint32_t count{0};
@@ -194,12 +197,15 @@ std::vector<VkPhysicalDevice> get_available_physical_devices(const VkInstance& i
     return available;
 }
     
+[[nodiscard]]
 VkPhysicalDeviceProperties get_physical_device_properties(const VkPhysicalDevice device)
 {
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(device, &properties);
     return properties;
 }
+
+[[nodiscard]]
 VkPhysicalDeviceFeatures get_physical_device_features(const VkPhysicalDevice device)
 {
     VkPhysicalDeviceFeatures features;
@@ -207,27 +213,13 @@ VkPhysicalDeviceFeatures get_physical_device_features(const VkPhysicalDevice dev
     return features;
 }
     
+[[nodiscard]]
 PhysicalDevicePropertyFeatureSet get_physical_device_properties_features(const VkPhysicalDevice device)
 {
     return {get_physical_device_properties(device), get_physical_device_features(device)};
 }
 
-/*
-bool queue_family_has_graphics(std::vector<VkQueueFamilyProperties> families, )
-{
-    return family.queueFlags & VK_QUEUE_GRAPHICS_BIT;
-}
-    
-bool queue_familty_has_present_support(const VkPhysicalDevice& device,
-                                       const uint32_t queue_family_index,
-                                       const VkSurfaceKHR& surface)
-{
-    VkBool32 present_support = false;
-    vkGetPhysicalDeviceSurfaceSupportKHR(device, queue_family_index, surface, &present_support);
-    return present_support;
-}
-*/
-
+[[nodiscard]]
 QueueFamilyIndices
 find_graphics_present_indices(std::vector<VkQueueFamilyProperties> families,
                               const VkPhysicalDevice& device,
@@ -251,6 +243,7 @@ find_graphics_present_indices(std::vector<VkQueueFamilyProperties> families,
     return indices;
 }
     
+[[nodiscard]]
 std::vector<VkQueueFamilyProperties> get_queue_families(const VkPhysicalDevice& device)
 {
     uint32_t count{0};
@@ -260,6 +253,7 @@ std::vector<VkQueueFamilyProperties> get_queue_families(const VkPhysicalDevice& 
     return available;
 }
     
+[[nodiscard]]
 std::vector<VkExtensionProperties> get_device_extensions(const VkPhysicalDevice& device)
 {
     uint32_t count{0};
@@ -269,6 +263,7 @@ std::vector<VkExtensionProperties> get_device_extensions(const VkPhysicalDevice&
     return available;
 }
 
+[[nodiscard]]
 bool is_device_extensions_supported(VkPhysicalDevice device,
                                     const std::vector<const char*> needed_extensions) 
 {
@@ -284,6 +279,7 @@ bool is_device_extensions_supported(VkPhysicalDevice device,
     return missing.empty();
 }
 
+[[nodiscard]]
 std::vector<VkSurfaceFormatKHR> get_swap_chain_formats(const VkPhysicalDevice& device,
                                                        const VkSurfaceKHR& surface)
 {
@@ -294,6 +290,7 @@ std::vector<VkSurfaceFormatKHR> get_swap_chain_formats(const VkPhysicalDevice& d
     return available;
 }
 
+[[nodiscard]]
 std::vector<VkPresentModeKHR> get_swap_chain_present_modes(const VkPhysicalDevice& device,
                                                            const VkSurfaceKHR& surface)
 {
@@ -304,6 +301,7 @@ std::vector<VkPresentModeKHR> get_swap_chain_present_modes(const VkPhysicalDevic
     return available;
 }
 
+[[nodiscard]]
 SwapChainSupportInfo get_swap_chain_support_info(const VkPhysicalDevice& device, 
                                                  const VkSurfaceKHR& surface)
 {
@@ -314,6 +312,7 @@ SwapChainSupportInfo get_swap_chain_support_info(const VkPhysicalDevice& device,
     return details;
 }
 
+[[nodiscard]]
 std::optional<VkSurfaceFormatKHR>
 find_swap_chain_surface_format(const std::vector<VkSurfaceFormatKHR>& surfaceformats,
                                const VkFormat format,
@@ -325,7 +324,7 @@ find_swap_chain_surface_format(const std::vector<VkSurfaceFormatKHR>& surfacefor
     return {};
 }
 
-
+[[nodiscard]]
 std::optional<VkSurfaceFormatKHR>
 find_ideal_swap_chain_surface_format(const std::vector<VkSurfaceFormatKHR>& formats)
 {
@@ -334,6 +333,7 @@ find_ideal_swap_chain_surface_format(const std::vector<VkSurfaceFormatKHR>& form
                                           VK_COLOR_SPACE_SRGB_NONLINEAR_KHR);
 }
 
+[[nodiscard]]
 std::optional<VkPresentModeKHR>
 find_swap_chain_present_mode(const std::vector<VkPresentModeKHR>& presentmodes,
                              const VkPresentModeKHR mode)
@@ -345,17 +345,20 @@ find_swap_chain_present_mode(const std::vector<VkPresentModeKHR>& presentmodes,
 
 }
 
+[[nodiscard]]
 VkPresentModeKHR get_default_swap_chain_present_mode()
 {
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
+[[nodiscard]]
 std::optional<VkPresentModeKHR>
 find_ideal_swap_chain_present_mode(const std::vector<VkPresentModeKHR>& presentmodes)
 {
     return find_swap_chain_present_mode(presentmodes, VK_PRESENT_MODE_MAILBOX_KHR);
 }
     
+[[nodiscard]]
 uint32_t get_minimum_swap_chain_image_count(const VkSurfaceCapabilitiesKHR& capabilities)
 {
     auto count = capabilities.minImageCount + 1;
@@ -365,6 +368,7 @@ uint32_t get_minimum_swap_chain_image_count(const VkSurfaceCapabilitiesKHR& capa
 }
 
 
+[[nodiscard]]
 uint32_t calculate_device_score(VkPhysicalDevice device,
                                 const VkSurfaceKHR& surface,
                                 const std::vector<const char*> needed_extensions)
@@ -408,6 +412,7 @@ uint32_t calculate_device_score(VkPhysicalDevice device,
     return score;
 }
 
+[[nodiscard]]
 std::vector<ScoredDevice> sort_devices_by_score(const std::vector<VkPhysicalDevice>& devices,
                                                 const VkSurfaceKHR& surface,
                                                 const std::vector<const char*> extensions) 
@@ -423,6 +428,7 @@ std::vector<ScoredDevice> sort_devices_by_score(const std::vector<VkPhysicalDevi
     return sorted;
 }
 
+[[nodiscard]]
 std::vector<ScoredDevice>
 remove_zero_score_devices(const std::vector<ScoredDevice>& score_devices)
 {
@@ -434,6 +440,7 @@ remove_zero_score_devices(const std::vector<ScoredDevice>& score_devices)
     return nonzero;
 }
     
+[[nodiscard]]
 std::optional<VkImageView> create_image_view(const VkDevice& device,
                                              const VkImage image,
                                              const VkFormat format)
@@ -461,6 +468,7 @@ std::optional<VkImageView> create_image_view(const VkDevice& device,
     return view;
 }
 
+[[nodiscard]]
 std::vector<VkImage> get_swap_chain_images(const VkDevice& device,
                                            const VkSwapchainKHR& swap_chain)
 {
@@ -471,7 +479,7 @@ std::vector<VkImage> get_swap_chain_images(const VkDevice& device,
     return images;
 }
 
-
+[[nodiscard]]
 std::vector<VkImageView> get_swap_chain_image_views(const VkDevice& device,
                                                     const VkSwapchainKHR& swap_chain,
                                                     const VkFormat format)
@@ -487,6 +495,7 @@ std::vector<VkImageView> get_swap_chain_image_views(const VkDevice& device,
     return views;
 }
 
+[[nodiscard]]
 VkPipelineColorBlendAttachmentState
 create_color_blend_attachement_state(const bool use_alpha_blending)
 {
@@ -516,6 +525,7 @@ create_color_blend_attachement_state(const bool use_alpha_blending)
     return color_blend_attachment;
 }
 
+[[nodiscard]]
 VkPipelineColorBlendStateCreateInfo
 create_color_blend_state_info(const VkPipelineColorBlendAttachmentState& attachment_state)
 {
@@ -532,23 +542,9 @@ create_color_blend_state_info(const VkPipelineColorBlendAttachmentState& attachm
     return color_blending;
 }
 
-/*
-VkExtent2D get_window_size(SDL_Window* window)
-{
-    int width, height;
-    //SDL_GetWindowSize(window, &width, &height);
-    SDL_Vulkan_GetDrawableSize(window, &width, &height);
-    
-    VkExtent2D actualExtent = {
-        static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height)
-    };
-   return actualExtent;
-}
-*/
-
-VkExtent2D scale_extent_to_capabilities(VkExtent2D decired_extent, 
-                                        const VkSurfaceCapabilitiesKHR& capabilities)
+[[nodiscard]]
+VkExtent2D scale_window_size_to_capabilities(VkExtent2D decired_extent, 
+                                             const VkSurfaceCapabilitiesKHR& capabilities)
 {
     if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
         return capabilities.currentExtent;
@@ -562,7 +558,7 @@ VkExtent2D scale_extent_to_capabilities(VkExtent2D decired_extent,
     return decired_extent;
 }
  
-
+[[nodiscard]]
 VkExtent2D GraphicsContext::get_window_size()
 {
     int width, height;
@@ -570,15 +566,18 @@ VkExtent2D GraphicsContext::get_window_size()
     vkDeviceWaitIdle(m_logical_device);
     SDL_Vulkan_GetDrawableSize(m_window, &width, &height);
     
-    const VkExtent2D decired = {
+    const VkExtent2D size = {
         static_cast<uint32_t>(width),
         static_cast<uint32_t>(height)
     };
+   return size;
+}
+
+VkExtent2D GraphicsContext::scale_window_size_to_be_suitable(VkExtent2D decired)
+{
     const auto info =  get_swap_chain_support_info(m_physical_device, 
                                                    m_window_surface);
-    const auto actual = scale_extent_to_capabilities(decired, info.capabilities);
-
-   return actual;
+    return scale_window_size_to_capabilities(decired, info.capabilities);
 }
 
 void GraphicsContext::record_command_buffer(VkCommandBuffer command_buffer,
@@ -618,10 +617,7 @@ void GraphicsContext::record_command_buffer(VkCommandBuffer command_buffer,
         get_swap_chain_support_info(m_physical_device,
                                     m_window_surface); 
     
-    //const auto extent = get_window_size(m_window, swap_chain_info.capabilities);
-    //const auto extent = swap_chain_info.capabilities.currentExtent;
-    //const auto extent = get_window_size(m_window);
-    const auto extent = get_window_size();
+    const auto extent = scale_window_size_to_be_suitable(get_window_size());
 
     VkRenderPassBeginInfo renderpass_info{};
     renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -651,7 +647,13 @@ void GraphicsContext::record_command_buffer(VkCommandBuffer command_buffer,
     scissor.extent = extent;
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
     
-    const uint32_t vertex_count = 3;
+
+
+    VkBuffer vertex_buffers[] = {m_vertex_buffer->get_buffer()};
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
+    
+    const uint32_t vertex_count = m_vertex_buffer->vertice_count();
     const uint32_t instance_count = 1;
     const uint32_t first_vertex_index = 0;
     const uint32_t first_instance = 0;
@@ -669,12 +671,18 @@ void GraphicsContext::record_command_buffer(VkCommandBuffer command_buffer,
 
 GraphicsContext::GraphicsContext(const uint32_t width,
                                  const uint32_t height,
-                                 const ValidationLayers validation_layers,
-                                 const DeviceExtensions device_extensions,
                                  const ShaderBytecode& vertex_bytecode,
                                  const ShaderBytecode& fragment_bytecode
                                  )
 {
+    const arc::GraphicsContext::ValidationLayers validation_layers = {
+        "VK_LAYER_KHRONOS_validation"
+    };
+
+    const arc::GraphicsContext::DeviceExtensions device_extensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
+
     if (global::GraphicsContext_created)
         throw std::runtime_error("Constructor GraphicsContext() can only be called once");
 
@@ -712,7 +720,8 @@ GraphicsContext::GraphicsContext(const uint32_t width,
     }
     
     if (!validation_layers.empty()) {
-        is_validation_layers_supported(validation_layers);
+        if (!is_validation_layers_supported(validation_layers))
+            throw std::runtime_error("The retrieved validation layers are not supported!");
         instance_info.enabledLayerCount = static_cast<uint32_t>(validation_layers.size());
         instance_info.ppEnabledLayerNames = validation_layers.data();
     } else {
@@ -844,13 +853,18 @@ GraphicsContext::GraphicsContext(const uint32_t width,
     /* ===================================================================
      * Create Shader Stages
      */
-   
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertex_input_info.vertexBindingDescriptionCount = 0;
-    vertex_input_info.pVertexBindingDescriptions = nullptr; // Optional
-    vertex_input_info.vertexAttributeDescriptionCount = 0;
-    vertex_input_info.pVertexAttributeDescriptions = nullptr; // Optional
+    
+    const auto binding_description = Vertex::get_binding_description();
+    const auto attribute_descriptions = Vertex::get_attribute_descriptions();
+
+    vertex_input_info.vertexBindingDescriptionCount = 1;
+    vertex_input_info.pVertexBindingDescriptions = &binding_description;
+
+    vertex_input_info.vertexAttributeDescriptionCount =
+        static_cast<uint32_t>(attribute_descriptions.size());
+    vertex_input_info.pVertexAttributeDescriptions = attribute_descriptions.data();
 
     VkPipelineInputAssemblyStateCreateInfo input_assembly{};
     input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -874,10 +888,7 @@ GraphicsContext::GraphicsContext(const uint32_t width,
     const auto swap_chain_info = get_swap_chain_support_info(m_physical_device,
                                                              m_window_surface); 
 
-    //const auto extent = get_window_size(m_window, swap_chain_info.capabilities);
-    //const auto extent = get_window_size(m_window);
-    const auto extent = get_window_size();
-
+    const auto extent = scale_window_size_to_be_suitable(get_window_size());
     VkRect2D scissor{};
     scissor.offset = {0, 0};
     scissor.extent = extent;
@@ -1063,7 +1074,18 @@ GraphicsContext::GraphicsContext(const uint32_t width,
             throw std::runtime_error("Failed to create command pool!");
     }
 
-    
+    /* ===================================================================
+     * Create Vertex Buffers
+     */
+    const std::vector<arc::Vertex> vertices = {
+        {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+    };
+    m_vertex_buffer = VertexBuffer::create(m_physical_device, m_logical_device, vertices);
+    if (m_vertex_buffer == nullptr)
+            throw std::runtime_error("Failed to create vertex buffer!");
+
     /* ===================================================================
      * Create Command Buffers
      */
@@ -1359,13 +1381,17 @@ void GraphicsContext::create_swap_chain_framebuffers(const uint32_t width,
 
 void GraphicsContext::recreate_swap_chain() 
 {
+    // Wait with recreation of swap chain if window is minimized
+    // NOTE: This is not really testable on my setup..
+    auto size = get_window_size();
+    while (size.width == 0 || size.height == 0)
+        size = get_window_size();
+
     vkDeviceWaitIdle(m_logical_device);
     destroy_swap_chain();
     const auto info = get_swap_chain_support_info(m_physical_device, 
                                                   m_window_surface);
 
-    //auto extent = get_window_size(m_window);
-    //extent = get_window_size(extent, info.capabilities);
     auto extent = get_window_size();
     create_swap_chain(extent.width, extent.height);
     create_swap_chain_framebuffers(extent.width, extent.height);
@@ -1375,7 +1401,9 @@ void GraphicsContext::recreate_swap_chain()
 GraphicsContext::~GraphicsContext()
 {
     vkDeviceWaitIdle(m_logical_device);
-    
+
+    m_vertex_buffer.release();
+
     destroy_swap_chain();
 
     for (uint32_t i = 0; i < m_max_frames_in_flight; i++) {
