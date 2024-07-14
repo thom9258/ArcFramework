@@ -1,38 +1,50 @@
 #include "../arc/window.hpp"
+#include "../arc/sdlgl.hpp"
+#include "../arc/error.hpp"
+
+#include "create_resource.hpp"
 
 namespace arc {
 
-Window::Window(SDL_Window* ptr) : m_ptr(ptr) {}
+class Window::Impl {
+public:
+    Impl(Impl&&) = delete;
+    Impl(const Impl&) = delete;
+    Impl operator=(Impl&&) = delete;
+    Impl operator=(const Impl&) = delete;
 
-Window::~Window() {
-    SDL_DestroyWindow((SDL_Window*)m_ptr);
-}
+    Impl(const char *title, int x, int y, int w, int h, Uint32 flags)
+        : m_ptr(create_resource(SDL_CreateWindow, SDL_DestroyWindow, 
+                                title, x, y, w, h, flags))
+    {
+    }
+    ~Impl() = default;
+    SDL_Window* raw() {return m_ptr.get();}
 
-WindowPtr make_Window(const char *title, int x, int y, int w, int h, Uint32 flags) {
-    if (w < 1 || h < 1 || title == nullptr)
-        throw fatal(CODEPOSITION, "Window parameters are invalid");
+private:
+    std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> m_ptr;
+};
 
-    auto window = std::make_shared<Window>(SDL_CreateWindow(title, x, y, w, h, flags));
-    try_throw_sdl_error(CODEPOSITION);
-    if (!window)
-        throw fatal(CODEPOSITION, "Window could not be created");
+//Window::Window() = default;
 
-    log_info("Initialized window");
+Window::~Window() = default;
+
+Window Window::create(const char *title, int x, int y, int w, int h, uint32_t flags) {
+    Window window{};
+    window.m_impl = std::make_unique<Impl>(title, x, y, w, h, flags);
     return window;
 }
 
-std::pair<int, int> size(const WindowPtr window) noexcept {
-    if (!window)
-        return {0,0};
+std::pair<int, int> Window::size() const noexcept {
     int w;
     int h;
-    SDL_GetWindowSize((SDL_Window*)window->ptr(), &w, &h);
+    SDL_GetWindowSize(m_impl->raw(), &w, &h);
     return {w, h};
 }
 
-void resize(WindowPtr window, int w, int h) {
-    SDL_SetWindowSize((SDL_Window*)window->ptr(), w, h);
-    try_throw_sdl_error(CODEPOSITION);
+void Window::resize(int w, int h) {
+    SDL_SetWindowSize(m_impl->raw(), w, h);
+    maybe_throw_sdl_error(CODEPOSITION);
 }
 
 }

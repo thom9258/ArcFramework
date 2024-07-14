@@ -11,7 +11,7 @@ int main(int argc, char** argv) {
         "VK_LAYER_KHRONOS_validation"
     };
 
-    const std::vector<const char*> device_extensions = {
+    const arc::GraphicsContext::DeviceExtensions device_extensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
