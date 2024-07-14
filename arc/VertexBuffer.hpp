@@ -1,7 +1,10 @@
+#pragma once
+
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 
 #include "DeclareNotCopyable.hpp"
+#include "BasicBuffer.hpp"
 
 #include <memory>
 #include <vector>
@@ -26,19 +29,22 @@ public:
     [[nodiscard]]
     static std::unique_ptr<VertexBuffer> create(const VkPhysicalDevice& physical_device,
                                                 const VkDevice& logical_device,
-                                                const std::vector<arc::Vertex>& vertices
-                                                );
+                                                const std::vector<arc::Vertex>& vertices);
     [[nodiscard]]
     static std::unique_ptr<VertexBuffer> create_staging(const VkPhysicalDevice& physical_device,
                                                         const VkDevice& logical_device,
-                                                        const std::vector<arc::Vertex>& vertices
-                                                        );
+                                                        const VkCommandPool& command_pool,
+                                                        const VkQueue& graphics_queue,
+                                                        const std::vector<arc::Vertex>& vertices);
 
     VertexBuffer() = delete;
     VertexBuffer(const VkDevice& logical_device);
     
     [[nodiscard]]
-    size_t vertice_count();
+    size_t get_count();
+
+    [[nodiscard]]
+    size_t get_memsize();
 
     [[nodiscard]]
     VkBuffer get_buffer();
@@ -48,7 +54,8 @@ public:
 private:
     const VkDevice& m_logical_device;
     VkBuffer m_vertex_buffer;
-    size_t m_vertice_count;
+    VkBufferCreateInfo m_vertice_info;
+    size_t m_count;
     VkDeviceMemory m_vertex_buffer_memory;
 };
 

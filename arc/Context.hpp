@@ -7,6 +7,7 @@
 #include <glm/glm.hpp>
 
 #include "VertexBuffer.hpp"
+#include "IndexBuffer.hpp"
 
 #ifdef _WIN32
     #pragma comment(linker, "/subsystem:windows")
@@ -107,6 +108,7 @@ private:
     VkCommandPool m_command_pool;
 
     std::unique_ptr<VertexBuffer> m_vertex_buffer;
+    std::unique_ptr<IndexBuffer> m_index_buffer;
     
     // TODO: This could maybe be split into a frame handler?
     const uint32_t m_max_frames_in_flight{2};

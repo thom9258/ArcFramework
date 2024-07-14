@@ -653,7 +653,7 @@ void GraphicsContext::record_command_buffer(VkCommandBuffer command_buffer,
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
     
-    const uint32_t vertex_count = m_vertex_buffer->vertice_count();
+    const uint32_t vertex_count = m_vertex_buffer->get_count();
     const uint32_t instance_count = 1;
     const uint32_t first_vertex_index = 0;
     const uint32_t first_instance = 0;
@@ -1078,11 +1078,24 @@ GraphicsContext::GraphicsContext(const uint32_t width,
      * Create Vertex Buffers
      */
     const std::vector<arc::Vertex> vertices = {
-        {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-        {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
     };
-    m_vertex_buffer = VertexBuffer::create(m_physical_device, m_logical_device, vertices);
+    const std::vector<uint16_t> indices = {
+        0, 1, 2, 2, 3, 0
+    };
+    // Normal Copy
+    //m_vertex_buffer = VertexBuffer::create(m_physical_device, m_logical_device, vertices);
+
+    // Staging Buffer Copy
+    m_vertex_buffer = VertexBuffer::create_staging(m_physical_device,
+                                                   m_logical_device,
+                                                   m_command_pool,
+                                                   m_graphics_queue,
+                                                   vertices);
+
     if (m_vertex_buffer == nullptr)
             throw std::runtime_error("Failed to create vertex buffer!");
 
