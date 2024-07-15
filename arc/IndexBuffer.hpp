@@ -3,12 +3,12 @@
 #include "BasicBuffer.hpp"
 
 namespace arc {
-
-struct IndexTypeTag {
-    static uint32_t bit;
+    
+struct IndexBufferPolicy {
+    using value_type = uint32_t;
+    static const uint32_t buffer_type_bit;
 };
 
-using Index = uint32_t;
-using IndexBuffer = BasicBuffer<Index, IndexTypeTag>;
+using IndexBuffer = BasicBuffer<IndexBufferPolicy>;
 
 }

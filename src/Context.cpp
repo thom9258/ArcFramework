@@ -648,20 +648,35 @@ void GraphicsContext::record_command_buffer(VkCommandBuffer command_buffer,
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
     
 
-
+    /* ===================================================================
+     * Draw
+     */
     VkBuffer vertex_buffers[] = {m_vertex_buffer->get_buffer()};
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
     
-    const uint32_t vertex_count = m_vertex_buffer->get_count();
-    const uint32_t instance_count = 1;
-    const uint32_t first_vertex_index = 0;
-    const uint32_t first_instance = 0;
-    vkCmdDraw(command_buffer,
-              vertex_count,
-              instance_count,
-              first_vertex_index,
-              first_instance);
+    vkCmdBindIndexBuffer(command_buffer, m_index_buffer->get_buffer(), 0, VK_INDEX_TYPE_UINT32);
+    
+    const uint32_t instanceCount = 1;
+    const uint32_t firstIndex = 0;
+    const int32_t  vertexOffset = 0;
+    const uint32_t firstInstance = 0;
+    vkCmdDrawIndexed(command_buffer,
+                     m_index_buffer->get_count(),
+                     instanceCount,
+                     firstIndex,
+                     vertexOffset,
+                     firstInstance);
+    
+    //const uint32_t vertex_count = m_vertex_buffer->get_count();
+    //const uint32_t instance_count = 1;
+    //const uint32_t first_vertex_index = 0;
+    //const uint32_t first_instance = 0;
+    //vkCmdDraw(command_buffer,
+    //          vertex_count,
+    //          instance_count,
+    //          first_vertex_index,
+    //          first_instance);
 
     vkCmdEndRenderPass(command_buffer);
     status = vkEndCommandBuffer(command_buffer);
@@ -1083,7 +1098,7 @@ GraphicsContext::GraphicsContext(const uint32_t width,
         {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
         {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
     };
-    const std::vector<uint16_t> indices = {
+    const IndexBuffer::vector_type indices = {
         0, 1, 2, 2, 3, 0
     };
     // Normal Copy
@@ -1098,6 +1113,13 @@ GraphicsContext::GraphicsContext(const uint32_t width,
 
     if (m_vertex_buffer == nullptr)
             throw std::runtime_error("Failed to create vertex buffer!");
+    
+    m_index_buffer = IndexBuffer::create(m_physical_device,
+                                                   m_logical_device,
+                                                   indices);
+
+    if (m_index_buffer == nullptr)
+            throw std::runtime_error("Failed to create index buffer!");
 
     /* ===================================================================
      * Create Command Buffers
@@ -1415,9 +1437,10 @@ GraphicsContext::~GraphicsContext()
 {
     vkDeviceWaitIdle(m_logical_device);
 
-    m_vertex_buffer.release();
-
     destroy_swap_chain();
+
+    m_vertex_buffer.reset();
+    m_index_buffer.reset();
 
     for (uint32_t i = 0; i < m_max_frames_in_flight; i++) {
         vkDestroySemaphore(m_logical_device, m_semaphores_image_available[i], nullptr);

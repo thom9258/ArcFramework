@@ -2,5 +2,6 @@
 
 namespace arc {
 
-uint32_t IndexTypeTag::bit = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+const uint32_t IndexBufferPolicy::buffer_type_bit = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+
 }

@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 #include <array>
+#include <string.h>
 
 namespace arc {
     
@@ -16,6 +17,7 @@ namespace arc {
 VkPhysicalDeviceMemoryProperties
 get_physical_device_memory_properties(const VkPhysicalDevice device);
    
+[[nodiscard]]
 uint32_t find_memory_type(const VkPhysicalDeviceMemoryProperties mem_properties,
                           const uint32_t type_filter,
                           const VkMemoryPropertyFlags property_flags);
@@ -35,24 +37,38 @@ void copy_buffer(const VkDevice& logical_device,
                  const VkDeviceSize& size,
                  const VkBuffer& src,
                  VkBuffer& dst);
-
+    
+void memcopy_to_buffer(const VkDevice& logical_device,
+                       const void* src,
+                       const VkDeviceSize& memsize,
+                       VkDeviceMemory& dst);
    
-template <class Type, class TypeTag>
-class BasicBuffer : public DeclareNotCopyable {
+template<typename T>
+concept BufferPolicy = requires
+{
+    { T::buffer_type_bit };
+    { std::same_as<decltype(T::buffer_type_bit), uint32_t> };
+    //{ T::value_type }; // TODO: is it possible to check for using directives in concepts?
+};
+   
+template <BufferPolicy Policy>
+class BasicBuffer : public DeclareNotCopyable 
+{
 public:
-    using value_type = Type;
+    using value_type = typename Policy::value_type;
+    using vector_type = std::vector<value_type>;
 
     [[nodiscard]]
     static std::unique_ptr<BasicBuffer> create(const VkPhysicalDevice& physical_device,
                                                const VkDevice& logical_device,
-                                               const std::vector<Type>& values);
+                                               const vector_type& values);
 
     [[nodiscard]]
     static std::unique_ptr<BasicBuffer> create_staging(const VkPhysicalDevice& physical_device,
                                                        const VkDevice& logical_device,
                                                        const VkCommandPool& command_pool,
                                                        const VkQueue& graphics_queue,
-                                                       const std::vector<Type>& values);
+                                                       const vector_type& values);
  
     BasicBuffer() = delete;
     BasicBuffer(const VkDevice& logical_device);
@@ -76,48 +92,41 @@ private:
     size_t m_count;
 };
     
-template <class Type, class TypeTag>
-std::unique_ptr<BasicBuffer<Type, TypeTag>> BasicBuffer<Type, TypeTag>::create(
+template <BufferPolicy Policy>
+std::unique_ptr<BasicBuffer<Policy>> BasicBuffer<Policy>::create(
     const VkPhysicalDevice& physical_device,
     const VkDevice& logical_device,
-    const std::vector<Type>& values)
+    const vector_type& values)
 {
-    auto buffer = std::make_unique<BasicBuffer<Type, TypeTag>>(logical_device);
+    auto buffer = std::make_unique<BasicBuffer<Policy>>(logical_device);
     buffer->m_count = values.size();
     create_buffer(physical_device,
                   logical_device,
                   sizeof(values[0]) * values.size(),
-                  VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                  Policy::buffer_type_bit,
                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT 
                   | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                   buffer->m_info,
                   buffer->m_buffer,
                   buffer->m_memory);
 
-    void* data_ptr;
-    vkMapMemory(logical_device,
-                buffer->m_memory,
-                0,
-                buffer->get_memsize(),
-                0,
-                &data_ptr);
-
-    memcpy(data_ptr, values.data(), static_cast<size_t>(buffer->get_memsize()));
-    vkUnmapMemory(logical_device, buffer->m_memory);
+    memcopy_to_buffer(logical_device,
+                      static_cast<const void*>(values.data()),
+                      sizeof(values[0]) * values.size(),
+                      buffer->m_memory);
     return buffer;
 }
     
-template <class Type, class TypeTag>
-std::unique_ptr<BasicBuffer<Type, TypeTag>>
-BasicBuffer<Type, TypeTag>::create_staging(const VkPhysicalDevice& physical_device,
-                                             const VkDevice& logical_device,
-                                             const VkCommandPool& command_pool,
-                                             const VkQueue& graphics_queue,
-                                             const std::vector<Type>& values)
+template <BufferPolicy Policy>
+std::unique_ptr<BasicBuffer<Policy>>
+BasicBuffer<Policy>::create_staging(const VkPhysicalDevice& physical_device,
+                                    const VkDevice& logical_device,
+                                    const VkCommandPool& command_pool,
+                                    const VkQueue& graphics_queue,
+                                    const vector_type& values)
 {
     const auto size = sizeof(values[0]) * values.size();
-
-    auto staging = std::make_unique<BasicBuffer<Type, TypeTag>>(logical_device);
+    auto staging = std::make_unique<BasicBuffer<Policy>>(logical_device);
     staging->m_count = values.size();
     create_buffer(physical_device,
                   logical_device,
@@ -125,66 +134,66 @@ BasicBuffer<Type, TypeTag>::create_staging(const VkPhysicalDevice& physical_devi
                   VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT 
                   | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                  staging->m_vertice_info,
-                  staging->m_vertex_buffer,
-                  staging->m_vertex_buffer_memory);
+                  staging->m_info,
+                  staging->m_buffer,
+                  staging->m_memory);
 
-    void* data_ptr;
-    vkMapMemory(logical_device,
-                staging->m_vertex_buffer_memory,
-                0,
-                staging->get_memsize(),
-                0,
-                &data_ptr);
-    
-    memcpy(data_ptr, values.data(), staging->get_memsize());
-    vkUnmapMemory(logical_device, staging->m_vertex_buffer_memory);
+    memcopy_to_buffer(logical_device,
+                      static_cast<const void*>(values.data()),
+                      size,
+                      staging->m_memory);
 
-    auto buffer = std::make_unique<BasicBuffer<Type, TypeTag>>(logical_device);
+    auto buffer = std::make_unique<BasicBuffer<Policy>>(logical_device);
     buffer->m_count = values.size();
     create_buffer(physical_device,
                   logical_device,
                   size,
-                  TypeTag::bit | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                  Policy::buffer_type_bit | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT 
                   | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                  buffer->m_vertice_info,
-                  buffer->m_vertex_buffer,
-                  buffer->m_vertex_buffer_memory);
+                  buffer->m_info,
+                  buffer->m_buffer,
+                  buffer->m_memory);
 
     copy_buffer(logical_device,
                 command_pool,
                 graphics_queue,
                 size,
-                staging->m_vertex_buffer,
-                buffer->m_vertex_buffer);
+                staging->m_buffer,
+                buffer->m_buffer);
    
     return buffer;
 }
     
-template <class Type, class TypeTag>
-VkBuffer BasicBuffer<Type, TypeTag>::get_buffer()
+template <BufferPolicy Policy>
+BasicBuffer<Policy>::BasicBuffer(const VkDevice& logical_device)
+    : m_logical_device(logical_device)
 {
-    return m_buffer;
 }
-
-template <class Type, class TypeTag>
-size_t BasicBuffer<Type, TypeTag>::get_memsize()
-{
-    return m_info.size;
-}
-
-template <class Type, class TypeTag>
-size_t BasicBuffer<Type, TypeTag>::get_count()
-{
-    return m_count;
-}
-
-template <class Type, class TypeTag>
-BasicBuffer<Type, TypeTag>::~BasicBuffer()
+ 
+template <BufferPolicy Policy>
+BasicBuffer<Policy>::~BasicBuffer()
 {
     vkDestroyBuffer(m_logical_device, m_buffer, nullptr);
     vkFreeMemory(m_logical_device, m_memory, nullptr);
 }
- 
+   
+template <BufferPolicy Policy>
+VkBuffer BasicBuffer<Policy>::get_buffer()
+{
+    return m_buffer;
+}
+
+template <BufferPolicy Policy>
+size_t BasicBuffer<Policy>::get_memsize()
+{
+    return m_info.size;
+}
+
+template <BufferPolicy Policy>
+size_t BasicBuffer<Policy>::get_count()
+{
+    return m_count;
+}
+
 } 

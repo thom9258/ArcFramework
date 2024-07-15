@@ -110,5 +110,16 @@ void copy_buffer(const VkDevice& logical_device,
 
     vkFreeCommandBuffers(logical_device, command_pool, 1, &command_buffer);
 }
+    
+void memcopy_to_buffer(const VkDevice& logical_device,
+                       const void* src,
+                       const VkDeviceSize& memsize,
+                       VkDeviceMemory& dst)
+{
+    void* data_ptr;
+    vkMapMemory(logical_device, dst, 0, memsize, 0, &data_ptr);
+    memcpy(data_ptr, src, static_cast<size_t>(memsize));
+    vkUnmapMemory(logical_device, dst); 
+}
  
 }
