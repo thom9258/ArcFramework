@@ -37,12 +37,18 @@ void copy_buffer(const VkDevice& logical_device,
                  const VkDeviceSize& size,
                  const VkBuffer& src,
                  VkBuffer& dst);
+
+[[nodiscard]]
+void* get_memory_mapping(const VkDevice& logical_device,
+                         const uint32_t size,
+                         const VkDeviceMemory& target_memory);
     
 void memcopy_to_buffer(const VkDevice& logical_device,
                        const void* src,
                        const VkDeviceSize& memsize,
                        VkDeviceMemory& dst);
    
+
 template<typename T>
 concept BufferPolicy = requires
 {
@@ -195,5 +201,5 @@ size_t BasicBuffer<Policy>::get_count()
 {
     return m_count;
 }
-
+ 
 } 

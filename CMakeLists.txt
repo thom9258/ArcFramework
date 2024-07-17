@@ -25,16 +25,20 @@ find_package(Vulkan REQUIRED)
 
 set(ARC_SOURCES 
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Context.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/VertexBuffer.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/BasicBuffer.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/VertexBuffer.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/IndexBuffer.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/UniformBuffer.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/FlightFrame.cpp
 )
     
 set(ARC_INCLUDES
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/Context.hpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/arc/VertexBuffer.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/BasicBuffer.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/arc/VertexBuffer.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/IndexBuffer.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/arc/UniformBuffer.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/arc/FlightFrame.hpp
 )
 
 add_library(${PROJECT_NAME} STATIC)

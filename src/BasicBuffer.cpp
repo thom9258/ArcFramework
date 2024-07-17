@@ -111,15 +111,26 @@ void copy_buffer(const VkDevice& logical_device,
     vkFreeCommandBuffers(logical_device, command_pool, 1, &command_buffer);
 }
     
+void* get_memory_mapping(const VkDevice& logical_device,
+                         const uint32_t size,
+                         const VkDeviceMemory& target_memory)
+{
+    void* mapping{nullptr};
+    vkMapMemory(logical_device, target_memory, 0, size, 0, &mapping);
+    return mapping;
+}
+    
 void memcopy_to_buffer(const VkDevice& logical_device,
                        const void* src,
                        const VkDeviceSize& memsize,
                        VkDeviceMemory& dst)
 {
-    void* data_ptr;
-    vkMapMemory(logical_device, dst, 0, memsize, 0, &data_ptr);
-    memcpy(data_ptr, src, static_cast<size_t>(memsize));
+    // TODO: would it be beneficial to have a "with_mapping_to_buffer"
+    // function that creates the opening and accepts a lambda to do what
+    // it needs to do and automatically closes afterwards?
+    auto mapping = get_memory_mapping(logical_device, memsize, dst);
+    memcpy(mapping, src, static_cast<size_t>(memsize));
     vkUnmapMemory(logical_device, dst); 
 }
- 
+
 }
