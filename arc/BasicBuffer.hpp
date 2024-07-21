@@ -3,15 +3,14 @@
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 
-#include "DeclareNotCopyable.hpp"
+#include "TypeTraits.hpp"
 
 #include <memory>
 #include <vector>
 #include <array>
 #include <string.h>
 
-namespace arc {
-    
+namespace ArcGraphics {
 
 [[nodiscard]]
 VkPhysicalDeviceMemoryProperties
@@ -58,7 +57,7 @@ concept BufferPolicy = requires
 };
    
 template <BufferPolicy Policy>
-class BasicBuffer : public DeclareNotCopyable 
+class BasicBuffer : public IsNotLvalueCopyable 
 {
 public:
     using value_type = typename Policy::value_type;

@@ -1,6 +1,6 @@
 #include "../arc/VertexBuffer.hpp"
 
-namespace arc {
+namespace ArcGraphics {
     
 const uint32_t VertexBufferPolicy::buffer_type_bit = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
  

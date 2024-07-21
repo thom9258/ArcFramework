@@ -1,52 +1,34 @@
-#include "Context.hpp"
-#include "DeclareNotCopyable.hpp"
+#pragma once
+
+#include "TypeTraits.hpp"
+#include "Device.hpp"
 
 #include <vector>
 #include <string>
 
 
-namespace arc {
+namespace ArcGraphics {
 
 using ShaderBytecode = std::vector<char>;
 
 [[nodiscard]]
 ShaderBytecode read_shader_bytecode(const std::string& filename);
 
-
-class ShaderModule : public DeclareNotCopyable
+[[nodiscard]]
+VkShaderModule compile_shader_bytecode(const VkDevice logical_device,
+                                       const ShaderBytecode bytecode);
+    
+class ShaderPipeline : public IsNotLvalueCopyable
 {
 public:
-    ShaderModule(const ShaderBytecode& code, const VkDevice& device);
-    ~ShaderModule();
-    const VkShaderModule& get_module() const noexcept;
-private:
-    VkShaderModule m_shader_module;
-    const VkDevice& m_logical_device;
-};
-    
-class VertexShaderModule : public ShaderModule
-{
-    using ShaderModule::ShaderModule;
-};
+    ShaderPipeline(const VkShaderModule vertex,
+                   const VkShaderModule fragment
+                   //const VkDevice logical_device
+                   );
 
-class FragmentShaderModule : public ShaderModule
-{
-    using ShaderModule::ShaderModule;
-};
-    
-class GraphicsPipeline : public DeclareNotCopyable
-{
-public:
-    GraphicsPipeline(const VertexShaderModule& vertex,
-                     const FragmentShaderModule& fragment,
-                     const VkDevice& logical_device,
-                     const VkExtent2D swap_chain_extent,
-                     const VkFormat swap_chain_surface_format
-                     );
-
-    ~GraphicsPipeline();
+    ~ShaderPipeline();
 private:
-    const VkDevice& m_logical_device;
+    //const VkDevice& m_logical_device;
     VkPipelineLayout m_pipeline_layout;
     VkRenderPass m_render_pass;
 };

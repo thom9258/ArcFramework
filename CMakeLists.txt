@@ -24,7 +24,11 @@ find_package(SDL2 REQUIRED)
 find_package(Vulkan REQUIRED)
 
 set(ARC_SOURCES 
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/Context.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/GlobalContext.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/Algorithm.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/Device.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/Shader.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/Renderer.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/BasicBuffer.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/VertexBuffer.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/IndexBuffer.cpp
@@ -33,7 +37,12 @@ set(ARC_SOURCES
 )
     
 set(ARC_INCLUDES
-  ${CMAKE_CURRENT_SOURCE_DIR}/arc/Context.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/arc/TypeTraits.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/arc/GlobalContext.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/arc/Algorithm.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/arc/Shader.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/arc/Device.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/arc/Renderer.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/BasicBuffer.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/VertexBuffer.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/IndexBuffer.hpp

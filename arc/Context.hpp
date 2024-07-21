@@ -30,7 +30,7 @@
 
 #include "DeclareNotCopyable.hpp"
 
-namespace arc {
+namespace ArcGraphics {
     
 //TODO: temporary object here    
 struct UniformBufferObject {
@@ -70,7 +70,8 @@ class FragmentShaderModule : public ShaderModule
     
 class GraphicsContext : public DeclareNotCopyable
 {
-public: using ValidationLayers = std::vector<const char*>;
+public: 
+    using ValidationLayers = std::vector<const char*>;
     using DeviceExtensions = std::vector<const char*>;
 
     ~GraphicsContext();

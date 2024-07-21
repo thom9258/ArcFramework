@@ -2,7 +2,7 @@
 
 #include "BasicBuffer.hpp"
 
-namespace arc {
+namespace ArcGraphics {
     
 struct IndexBufferPolicy {
     using value_type = uint32_t;

@@ -5,7 +5,7 @@
 #include <iostream>
 #include <stdexcept>
 
-namespace arc {
+namespace ArcGraphics {
 
   /*
 */

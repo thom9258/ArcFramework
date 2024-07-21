@@ -3,14 +3,13 @@
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 
-#include "DeclareNotCopyable.hpp"
 #include "BasicBuffer.hpp"
 
 #include <memory>
 #include <vector>
 #include <array>
 
-namespace arc {
+namespace ArcGraphics {
     
 struct Vertex {
     glm::vec2 pos{};

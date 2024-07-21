@@ -1,4 +1,7 @@
-#include <arc/Context.hpp>
+#include <arc/Device.hpp>
+#include <arc/Renderer.hpp>
+
+#include <iostream>
 
 #define WIDTH 1200
 #define HEIGHT 900
@@ -7,14 +10,21 @@ int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
     
-    const auto vertex_bytecode = arc::read_shader_bytecode("../triangle.vert.spv");
-    const auto fragment_bytecode = arc::read_shader_bytecode("../triangle.frag.spv");
+    const auto device = ArcGraphics::Device::Builder()
+        .add_khronos_validation_layer()
+        .produce();
+    
+    std::cout << "device\n"
+              << "  instance id: " << device.instance() << "\n"
+              << "  physical device id: " << device.physical_device() << "\n"
+              << "  logical device id: " << device.logical_device() << std::endl;
 
-    auto context = arc::GraphicsContext(WIDTH,
-                                        HEIGHT,
-                                        vertex_bytecode,
-                                        fragment_bytecode
-                                        );
+    const auto renderer = ArcGraphics::Renderer::Builder(&device)
+        .with_wanted_window_size(1200, 800)
+        .with_window_name("Triangle")
+        .with_window_flags(SDL_WINDOW_BORDERLESS
+                         | SDL_WINDOW_SHOWN)
+        .produce();
 
     bool exit = false;
     SDL_Event event;
@@ -42,7 +52,7 @@ int main(int argc, char** argv) {
                 switch (wev.event) {
                 case SDL_WINDOWEVENT_RESIZED:
                 case SDL_WINDOWEVENT_SIZE_CHANGED:
-                    context.window_resized_event();
+                    //context.window_resized_event();
                     break;
                 case SDL_WINDOWEVENT_CLOSE:
                     exit = true;
@@ -55,6 +65,6 @@ int main(int argc, char** argv) {
         /* =======================================================
          * Draw Frame
          */
-        context.draw_frame();
+        //context.draw_frame();
     }
 }

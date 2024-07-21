@@ -4,8 +4,7 @@
 
 #include "BasicBuffer.hpp"
 
-namespace arc {
-    
+namespace ArcGraphics {
 
 [[nodiscard]]
 VkDescriptorSetLayoutBinding create_descriptor_set_layout_binding(const uint32_t binding_index,
