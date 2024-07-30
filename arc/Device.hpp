@@ -19,6 +19,11 @@ class Device : protected IsNotLvalueCopyable
 public:
     class Builder;
 
+    Device(const VkInstance instance,
+           const VkPhysicalDevice physical_device,
+           const VkDevice logical_device,
+           const DeviceRenderingCapabilities capabilities);
+
     ~Device();
 
     [[nodiscard]]
@@ -34,11 +39,6 @@ public:
     const DeviceRenderingCapabilities& capabilities() const noexcept;
 
 private:
-    Device(const VkInstance instance,
-           const VkPhysicalDevice physical_device,
-           const VkDevice logical_device,
-           const DeviceRenderingCapabilities capabilities);
-
     VkInstance m_instance;
     VkPhysicalDevice m_physical_device;
     VkDevice m_logical_device;
@@ -54,7 +54,7 @@ public:
     Builder& add_validation_layers(const ValidationLayers layers);
     Builder& add_khronos_validation_layer();
 
-    Device produce();
+    std::shared_ptr<Device> produce();
     
 private:
     void reset_builder();

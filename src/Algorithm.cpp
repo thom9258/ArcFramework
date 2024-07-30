@@ -239,10 +239,20 @@ std::vector<VkPresentModeKHR> get_swap_chain_present_modes(const VkPhysicalDevic
 DeviceRenderingCapabilities get_rendering_capabilities(const VkPhysicalDevice& device, 
                                                        const VkSurfaceKHR& surface)
 {
-    DeviceRenderingCapabilities capabilities;
+    VkSurfaceCapabilitiesKHR surface_capabilities{};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device,
                                               surface,
-                                              &capabilities.surface_capabilities);
+                                              &surface_capabilities);
+
+    DeviceRenderingCapabilities capabilities{};
+    capabilities.min_image_count = surface_capabilities.minImageCount;
+    capabilities.max_image_count = surface_capabilities.maxImageCount;
+    capabilities.max_image_array_layers = surface_capabilities.maxImageArrayLayers;
+    capabilities.current_transform = surface_capabilities.currentTransform;
+    capabilities.supported_transforms = surface_capabilities.supportedTransforms;
+    capabilities.supported_composite_alpha = surface_capabilities.supportedCompositeAlpha;
+    capabilities.supported_usage_flags = surface_capabilities.supportedUsageFlags;
+
     capabilities.formats = get_swap_chain_formats(device, surface);
     capabilities.present_modes = get_swap_chain_present_modes(device, surface);
     return capabilities;
@@ -295,11 +305,11 @@ find_ideal_swap_chain_present_mode(const std::vector<VkPresentModeKHR>& presentm
 }
     
 [[nodiscard]]
-uint32_t get_minimum_swap_chain_image_count(const VkSurfaceCapabilitiesKHR& capabilities)
+uint32_t get_minimum_swap_chain_image_count(const DeviceRenderingCapabilities& capabilities)
 {
-    auto count = capabilities.minImageCount + 1;
-    if (capabilities.maxImageCount > 0 && count > capabilities.maxImageCount) 
-        count = capabilities.maxImageCount;
+    auto count = capabilities.min_image_count + 1;
+    if (capabilities.max_image_count > 0 && count > capabilities.max_image_count) 
+        count = capabilities.max_image_count;
     return count;
 }
 
@@ -645,7 +655,7 @@ CreatedSwapChain create_swap_chain(const VkPhysicalDevice physical_device,
     }
     
     const auto minimum_swap_chain_image_count =
-        get_minimum_swap_chain_image_count(swap_chain_info.surface_capabilities);
+        get_minimum_swap_chain_image_count(swap_chain_info);
     std::cout << "Wanted image count in swap chain: " << minimum_swap_chain_image_count << std::endl;
     
     // TODO extract create swap chain to function to avoid name redefinitions
@@ -680,7 +690,7 @@ CreatedSwapChain create_swap_chain(const VkPhysicalDevice physical_device,
         swap_chain_create_info.pQueueFamilyIndices = nullptr; // Optional
     }
 
-    swap_chain_create_info.preTransform = swap_chain_info.surface_capabilities.currentTransform;
+    swap_chain_create_info.preTransform = swap_chain_info.current_transform;
     swap_chain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     swap_chain_create_info.presentMode = present_mode.value();
     swap_chain_create_info.clipped = VK_TRUE;

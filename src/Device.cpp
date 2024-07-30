@@ -30,7 +30,7 @@ Device::Builder& Device::Builder::add_khronos_validation_layer()
     return *this;
 }
 
-Device Device::Builder::produce()
+std::shared_ptr<Device> Device::Builder::produce()
 {
     const DeviceExtensions device_extensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
@@ -68,6 +68,19 @@ Device Device::Builder::produce()
     auto capabilities = get_rendering_capabilities(physical_device,
                                                    tmp_window_surface);
 
+    //std::cout << "Window Capabilities:\n"
+    //          << "> current width/Height: " 
+    //          << capabilities.surface_capabilities.currentExtent.width << "/"
+    //          << capabilities.surface_capabilities.currentExtent.height << "\n"
+    //          << "> minimum width/Height: " 
+    //          << capabilities.surface_capabilities.minImageExtent.width << "/"
+    //          << capabilities.surface_capabilities.minImageExtent.height << "\n"
+    //          << "> maximum width/Height: " 
+    //          << capabilities.surface_capabilities.maxImageExtent.width << "/"
+    //          << capabilities.surface_capabilities.maxImageExtent.height 
+    //          << std::endl; 
+        
+
     /* =============================================================
      * Cleanup Temporary Window and Window-Surface
      */
@@ -75,7 +88,7 @@ Device Device::Builder::produce()
     SDL_DestroyWindow(tmp_window);
     
     reset_builder();
-    return Device(instance, physical_device, logical_device, capabilities);
+    return std::make_shared<Device>(instance, physical_device, logical_device, capabilities);
 }
 
 const VkInstance& Device::instance() const noexcept

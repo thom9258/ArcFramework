@@ -15,33 +15,42 @@ class Renderer
 public:
     class Builder;
 
-    Renderer();
+    Renderer(std::shared_ptr<Device>,
+             SDL_Window* window,
+             const VkSurfaceKHR window_surface,
+             const VkSwapchainKHR swapchain,
+             const std::vector<VkImageView> swapchain_image_views,
+             const VkSurfaceFormatKHR surface_format,
+             const DeviceRenderingCapabilities capabilities
+             );
+    
+    size_t swapchain_image_view_count() const;
+    const VkImageView& swapchain_image_view(const size_t index) const;
+    const DeviceRenderingCapabilities& capabilities() const;
+    SDL_Window* const& window() const;
+    const VkSurfaceKHR& window_surface() const;
+    const VkSwapchainKHR& swapchain() const;
+    const VkSurfaceFormatKHR& surface_format() const;
     ~Renderer();
 
 private:
-    VkQueue m_graphics_queue;
-    VkSwapchainKHR m_swap_chain;
-    VkSurfaceFormatKHR m_swap_chain_surface_format;
-    std::vector<VkImageView> m_swap_chain_image_views;
-    VkRenderPass m_render_pass;
-    VkDescriptorPool m_descriptor_pool;
-    VkDescriptorSetLayout m_descriptor_layout;
-    std::vector<VkDescriptorSet> m_descriptor_sets;
-    VkPipelineLayout m_graphics_pipeline_layout;
-    VkPipeline m_graphics_pipeline;
-    std::vector<VkFramebuffer> m_swap_chain_framebuffers;
-    bool m_swap_chain_framebuffer_resized{false};
-    VkCommandPool m_command_pool;
+    std::shared_ptr<Device> m_device;
+    SDL_Window* m_window;
+    VkSurfaceKHR m_window_surface;
+    VkSwapchainKHR m_swapchain;
+    std::vector<VkImageView> m_swapchain_image_views;
+    VkSurfaceFormatKHR m_surface_format;
+    DeviceRenderingCapabilities m_capabilities;
 };
     
 class Renderer::Builder 
 {
  public:
-    Builder(const Device* device);
+    Builder(std::shared_ptr<Device> device);
     ~Builder();
 
     [[nodiscard]]
-    Renderer produce();
+    std::shared_ptr<Renderer> produce();
     void reset_builder();
 
     Builder& with_wanted_window_size(const uint32_t width,
@@ -50,7 +59,7 @@ class Renderer::Builder
     Builder& with_window_flags(const uint32_t flags);
 
  private:
-    const Device* m_device;
+    std::shared_ptr<Device> m_device;
     std::string m_window_name;
     uint32_t m_window_width;
     uint32_t m_window_height;

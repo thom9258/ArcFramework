@@ -37,6 +37,7 @@ set(ARC_SOURCES
 )
     
 set(ARC_INCLUDES
+  ${CMAKE_CURRENT_SOURCE_DIR}/arc/Variant.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/TypeTraits.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/GlobalContext.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/Algorithm.hpp

@@ -52,7 +52,15 @@ struct CreatedSwapChain {
 };
 
 struct DeviceRenderingCapabilities {
-    VkSurfaceCapabilitiesKHR surface_capabilities;
+    // A condensed collection of members from VkSurfaceCapabilitiesKHR
+    uint32_t min_image_count;
+    uint32_t max_image_count;
+    uint32_t max_image_array_layers;
+    VkSurfaceTransformFlagsKHR supported_transforms;
+    VkSurfaceTransformFlagBitsKHR current_transform;
+    VkCompositeAlphaFlagsKHR supported_composite_alpha;
+    VkImageUsageFlags supported_usage_flags;
+
     std::vector<VkSurfaceFormatKHR> formats;
     std::vector<VkPresentModeKHR> present_modes;
 };
@@ -145,7 +153,7 @@ std::optional<VkPresentModeKHR>
 find_ideal_swap_chain_present_mode(const std::vector<VkPresentModeKHR>& presentmodes);
 
 [[nodiscard]]
-uint32_t get_minimum_swap_chain_image_count(const VkSurfaceCapabilitiesKHR& capabilities);
+uint32_t get_minimum_swap_chain_image_count(const DeviceRenderingCapabilities& capabilities);
     
 [[nodiscard]]
 uint32_t calculate_device_score(VkPhysicalDevice device,
