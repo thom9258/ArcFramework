@@ -1,6 +1,6 @@
 #include "../arc/BasicBuffer.hpp"
 
-namespace arc {
+namespace ArcGraphics {
 
 [[nodiscard]]
 VkPhysicalDeviceMemoryProperties

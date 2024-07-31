@@ -68,6 +68,7 @@ class FragmentShaderModule : public ShaderModule
     using ShaderModule::ShaderModule;
 };
     
+   
 class GraphicsContext : public DeclareNotCopyable
 {
 public: 

@@ -76,18 +76,228 @@ VkPipelineColorBlendStateCreateInfo create_color_blend_state_info(const bool use
     return color_blending;
 }
     
+const VkCommandPool& RenderPipeline::command_pool() const
+{
+    return m_command_pool;
+}
+
+void RenderPipeline::add_geometry(VertexBuffer* vertex_buffer,
+                                  IndexBuffer* index_buffer)
+{
+    m_vertex_buffer = vertex_buffer;
+    m_index_buffer = index_buffer;
+}
+    
+void RenderPipeline::record_command_buffer(VkCommandBuffer command_buffer,
+                                           uint32_t image_index) 
+{
+    /* ===================================================================
+     * Begin Command Buffer
+     */
+    VkCommandBufferBeginInfo begin_info{};
+    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin_info.flags = 0; // Optional
+    /*
+    VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT:
+    The command buffer will be rerecorded right after executing it once.
+    VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT:
+    This is a secondary command buffer that will be entirely within a single render pass.
+    VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT:
+    The command buffer can be resubmitted while it is also already pending execution.
+
+    None of these flags are applicable for us right now.
+    */
+
+    begin_info.pInheritanceInfo = nullptr; // Optional
+    /*
+    The pInheritanceInfo parameter is only relevant for secondary command buffers.
+    It specifies which state to inherit from the calling primary command buffers.   
+     */
+
+    auto status = vkBeginCommandBuffer(command_buffer, &begin_info);
+    if (status != VK_SUCCESS)
+        throw std::runtime_error("Failed to allocate command buffers!");
+    
+    /* ===================================================================
+     * Begin Command Buffer
+     */
+     const auto capabilities = get_rendering_capabilities(m_device->physical_device(),
+                                                          m_renderer->window_surface()); 
+    
+
+    VkRenderPassBeginInfo renderpass_info{};
+    renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderpass_info.renderPass = m_render_pass;
+    renderpass_info.framebuffer = m_swap_chain_framebuffers[image_index];
+    renderpass_info.renderArea.offset = {0, 0};
+    renderpass_info.renderArea.extent = m_render_extent;
+
+    VkClearValue clear_color = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+    renderpass_info.clearValueCount = 1;
+    renderpass_info.pClearValues = &clear_color;
+
+    vkCmdBeginRenderPass(command_buffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);   
+    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphics_pipeline);
+
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = static_cast<float>(m_render_extent.width);
+    viewport.height = static_cast<float>(m_render_extent.height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = m_render_extent;
+    vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+    
+
+    /* ===================================================================
+     * Draw
+     */
+
+    if (!m_vertex_buffer)
+        throw std::runtime_error("vertex buffer ptr was nullptr!");
+    if (!m_index_buffer)
+        throw std::runtime_error("index buffer ptr was nullptr!");
+
+    VkBuffer vertex_buffers[] = {m_vertex_buffer->get_buffer()};
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
+    vkCmdBindIndexBuffer(command_buffer, m_index_buffer->get_buffer(), 0, VK_INDEX_TYPE_UINT32);
+    vkCmdBindDescriptorSets(command_buffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            m_graphics_pipeline_layout,
+                            0,
+                            1,
+                            &m_descriptor_sets[m_current_frame],
+                            0,
+                            nullptr);
+    
+    const uint32_t instanceCount = 1;
+    const uint32_t firstIndex = 0;
+    const int32_t  vertexOffset = 0;
+    const uint32_t firstInstance = 0;
+    vkCmdDrawIndexed(command_buffer,
+                     m_index_buffer->get_count(),
+                     instanceCount,
+                     firstIndex,
+                     vertexOffset,
+                     firstInstance);
+    
+    vkCmdEndRenderPass(command_buffer);
+    status = vkEndCommandBuffer(command_buffer);
+    if (status != VK_SUCCESS)
+        throw std::runtime_error("Failed to record command buffer!");
+}
+
+void RenderPipeline::draw_frame()
+{
+    vkWaitForFences(m_device->logical_device(),
+                    1,
+                    &m_renderframes[m_current_frame].fence_in_flight,
+                    VK_TRUE,
+                    UINT64_MAX);
+    
+    //if (m_swap_chain_framebuffer_resized) {
+    //    recreate_swap_chain();
+    //    return;
+    //}
+
+    uint32_t image_index;
+    auto status = vkAcquireNextImageKHR(m_device->logical_device(),
+                                        m_renderer->swapchain(),
+                                        UINT64_MAX,
+                                        m_renderframes[m_current_frame].semaphore_image_available,
+                                        VK_NULL_HANDLE,
+                                        &image_index);
+
+    if (status == VK_ERROR_OUT_OF_DATE_KHR || m_swap_chain_framebuffer_resized) {
+        //recreate_swap_chain();
+        return;
+    } 
+    else if (status != VK_SUCCESS && status != VK_SUBOPTIMAL_KHR)
+        throw std::runtime_error("Failed to acquire swap chain image!");
+    
+    // Reset fences now we could get next image to draw on
+    vkResetFences(m_device->logical_device(),
+                  1,
+                  &m_renderframes[m_current_frame].fence_in_flight);
+
+    vkResetCommandBuffer(m_commandbuffers[m_current_frame], 0);
+    
+
+    record_command_buffer(m_commandbuffers[m_current_frame], image_index);
+    
+    /* Update Uniform buffers here
+     */
+    //update_ubo_rotation(m_current_frame);
+    
+    VkSubmitInfo submit_info{};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+    std::vector<VkSemaphore> waitSemaphores =
+        {m_renderframes[m_current_frame].semaphore_image_available};
+    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+
+    submit_info.waitSemaphoreCount = waitSemaphores.size();
+    submit_info.pWaitSemaphores = waitSemaphores.data();
+    submit_info.pWaitDstStageMask = waitStages;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &m_commandbuffers[m_current_frame];
+    
+    std::vector<VkSemaphore> signalSemaphores =
+        {m_renderframes[m_current_frame].semaphore_rendering_finished};
+    submit_info.signalSemaphoreCount = signalSemaphores.size();
+    submit_info.pSignalSemaphores = signalSemaphores.data();
+
+    status = vkQueueSubmit(m_renderer->graphics_queue(),
+                           1,
+                           &submit_info,
+                           m_renderframes[m_current_frame].fence_in_flight); 
+    if (status != VK_SUCCESS)
+        throw std::runtime_error("Failed to submit draw command buffer!");
+    
+    /* ===================================================================
+     * Presentation
+     */
+    VkPresentInfoKHR present_info{};
+    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present_info.waitSemaphoreCount = signalSemaphores.size();
+    present_info.pWaitSemaphores = signalSemaphores.data();
+    std::vector<VkSwapchainKHR> swapChains = {m_renderer->swapchain()};
+    present_info.swapchainCount = swapChains.size();
+    present_info.pSwapchains = swapChains.data();
+    present_info.pImageIndices = &image_index;
+    present_info.pResults = nullptr; // Optional
+
+    status = vkQueuePresentKHR(m_renderer->graphics_queue(), &present_info);
+
+    if (status == VK_ERROR_OUT_OF_DATE_KHR || m_swap_chain_framebuffer_resized) {
+        //recreate_swap_chain();
+        return;
+    } 
+    else if (status != VK_SUCCESS && status != VK_SUBOPTIMAL_KHR)
+        throw std::runtime_error("Failed to acquire swap chain image!");
+
+    m_current_frame = (m_current_frame + 1) % m_renderframes.size();
+}
   
-RenderPipeline::RenderPipeline(std::shared_ptr<Device> device,
-                               std::shared_ptr<Renderer> renderer,
+RenderPipeline::RenderPipeline(Device* device,
+                               Renderer* renderer,
                                const VkRenderPass render_pass,
                                const VkDescriptorPool descriptor_pool,
                                const VkDescriptorSetLayout descriptor_layout,
                                const std::vector<VkDescriptorSet> descriptor_sets,
                                const VkPipelineLayout graphics_pipeline_layout,
                                const VkPipeline graphics_pipeline,
+                               const VkExtent2D render_extent,
                                const std::vector<VkFramebuffer> framebuffers,
                                const std::vector<RenderFrame> renderframes,
-                               const std::vector<VkCommandBuffer> commandbuffers
+                               const std::vector<VkCommandBuffer> commandbuffers,
+                               const VkCommandPool command_pool
                                )
     : m_device(device)
     , m_renderer(renderer)
@@ -97,28 +307,45 @@ RenderPipeline::RenderPipeline(std::shared_ptr<Device> device,
     , m_descriptor_sets(descriptor_sets)
     , m_graphics_pipeline_layout(graphics_pipeline_layout)
     , m_graphics_pipeline(graphics_pipeline)
+    , m_render_extent(render_extent)
     , m_swap_chain_framebuffers(framebuffers)
     , m_renderframes(renderframes)
     , m_commandbuffers(commandbuffers)
+    , m_command_pool(command_pool)
 {
+    if (!m_device)
+        throw std::runtime_error("RenderPipeline() device was nullptr!");
+    if (!m_renderer)
+        throw std::runtime_error("RenderPipeline() renderer was nullptr!");
 }
     
-RenderPipeline::~RenderPipeline()
+void RenderPipeline::destroy()
 {
     const auto logical_device = m_device->logical_device();
+    vkDeviceWaitIdle(logical_device);
     
     // TODO TJNS this is part of recreating swap chain...
     for (auto& framebuffer: m_swap_chain_framebuffers)
         vkDestroyFramebuffer(logical_device, framebuffer, nullptr);
 
+    vkDestroyDescriptorPool(logical_device, m_descriptor_pool, nullptr);
+    vkDestroyDescriptorSetLayout(logical_device, m_descriptor_layout, nullptr);
    
     for (size_t i = 0; i < m_renderframes.size(); i++) {
         vkDestroyBuffer(logical_device, m_renderframes[i].uniform_buffer, nullptr);
         vkFreeMemory(logical_device, m_renderframes[i].uniform_buffer_memory, nullptr);
+
+        // synchronization objects
+        vkDestroySemaphore(logical_device,
+                           m_renderframes[i].semaphore_image_available,
+                           nullptr);
+        vkDestroySemaphore(logical_device,
+                           m_renderframes[i].semaphore_rendering_finished,
+                           nullptr);
+        vkDestroyFence(logical_device, m_renderframes[i].fence_in_flight, nullptr);
     }
 
-    vkDestroyDescriptorPool(logical_device, m_descriptor_pool, nullptr);
-    vkDestroyDescriptorSetLayout(logical_device, m_descriptor_layout, nullptr);
+    vkDestroyCommandPool(logical_device, m_command_pool, nullptr);
     vkDestroyPipeline(logical_device,
                       m_graphics_pipeline,
                       nullptr);
@@ -126,11 +353,8 @@ RenderPipeline::~RenderPipeline()
     vkDestroyRenderPass(logical_device, m_render_pass, nullptr);
 }
     
-
-RenderPipeline::Builder::~Builder() = default;
-    
-RenderPipeline::Builder::Builder(std::shared_ptr<Device> device,
-                                 std::shared_ptr<Renderer> renderer,
+RenderPipeline::Builder::Builder(Device* device,
+                                 Renderer* renderer,
                                  const ShaderBytecode vertex_bytecode,
                                  const ShaderBytecode fragment_bytecode)
     : m_device(device)
@@ -138,16 +362,10 @@ RenderPipeline::Builder::Builder(std::shared_ptr<Device> device,
     , m_vertex_bytecode(vertex_bytecode)
     , m_fragment_bytecode(fragment_bytecode)
 {
-    reset_builder();
-}
-    
-void RenderPipeline::Builder::reset_builder()
-{
-
-    m_use_alpha_blending = false;
-    m_max_frames_in_flight = 2;
-    m_render_width = 1200;
-    m_render_height = 800;
+    if (!m_device)
+        throw std::runtime_error("RenderPipeline::Builder() device was nullptr!");
+    if (!m_renderer)
+        throw std::runtime_error("RenderPipeline::Builder() renderer was nullptr!");
 }
 
 RenderPipeline::Builder& RenderPipeline::Builder::with_frames_in_flight(const uint32_t frames)
@@ -172,6 +390,11 @@ RenderPipeline::Builder& RenderPipeline::Builder::with_use_alpha_blending(const 
 
 RenderPipeline RenderPipeline::Builder::produce()
 {
+    std::cout << "==================================================\n"
+              << " Producing RenderPipeline\n"
+              << "=================================================="
+              << std::endl;
+
     const auto vert_module = compile_shader_bytecode(m_device->logical_device(),
                                                      m_vertex_bytecode);
 
@@ -215,7 +438,14 @@ RenderPipeline RenderPipeline::Builder::produce()
     dynamic_state.dynamicStateCount = static_cast<uint32_t>(dynamic_states.size());
     dynamic_state.pDynamicStates = dynamic_states.data();
     
-    const VkExtent2D render_extent = {m_render_width, m_render_height};
+    
+    VkExtent2D render_extent;
+    if (m_render_width == 0 || m_render_height == 0)
+        render_extent = m_renderer->capabilities().window_extent;
+    else
+        render_extent = {m_render_width, m_render_height};
+    std::cout << "Rendering extent: " << render_extent.width 
+              << " / " << render_extent.height << std::endl;
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
@@ -302,7 +532,6 @@ RenderPipeline RenderPipeline::Builder::produce()
      * Create Uniform Buffers
      */
     std::vector<RenderFrame> renderframes(m_max_frames_in_flight);
-
     for (size_t i = 0; i < renderframes.size(); i++) {
         create_uniform_buffer(m_device->physical_device(),
                               m_device->logical_device(),
@@ -425,6 +654,13 @@ RenderPipeline RenderPipeline::Builder::produce()
     
     if (status  != VK_SUCCESS)
         throw std::runtime_error("Failed to create graphics pipeline!");
+    
+
+   /* ===================================================================
+    * Cleanup shader modules now they are part of the graphics pipeline
+    */
+    vkDestroyShaderModule(m_device->logical_device(), vert_module, nullptr);
+    vkDestroyShaderModule(m_device->logical_device(), frag_module, nullptr);
 
    /* ===================================================================
     * Create Swap Chain Framebuffers
@@ -501,11 +737,47 @@ RenderPipeline RenderPipeline::Builder::produce()
                                       commandbuffers.data());
     if (status  != VK_SUCCESS)
         throw std::runtime_error("Failed to allocate command buffers!");
-
     std::cout << "allocated command buffers" << std::endl;
     
+    /* ===================================================================
+     * Create Sync Objects
+     */
 
-    reset_builder();
+    VkSemaphoreCreateInfo semaphore_info{};
+    semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fence_info{};
+    fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    for (size_t i = 0; i < renderframes.size(); i++) {
+        status = vkCreateSemaphore(m_device->logical_device(),
+                                   &semaphore_info,
+                                   nullptr,
+                                   &renderframes[i].semaphore_image_available);
+        if (status != VK_SUCCESS)
+            throw std::runtime_error("failed to create image available semaphore["
+                                     + std::to_string(i) + "]");
+        
+        status = vkCreateSemaphore(m_device->logical_device(),
+                                   &semaphore_info,
+                                   nullptr,
+                                   &renderframes[i].semaphore_rendering_finished);
+        if (status != VK_SUCCESS)
+            throw std::runtime_error("failed to create rendering finished semaphore["
+                                     + std::to_string(i) + "]");
+
+        status = vkCreateFence(m_device->logical_device(),
+                            &fence_info,
+                            nullptr,
+                            &renderframes[i].fence_in_flight);
+        if (status != VK_SUCCESS)
+            throw std::runtime_error("failed to create fence in flight ["
+                                     + std::to_string(i) + "]");
+    }
+    
+    std::cout << "Created synchronization objects" << std::endl;
+
     return RenderPipeline(m_device,
                           m_renderer,
                           render_pass,
@@ -514,9 +786,11 @@ RenderPipeline RenderPipeline::Builder::produce()
                           descriptor_sets,
                           graphics_pipeline_layout,
                           graphics_pipeline,
+                          render_extent,
                           swapchain_framebuffers,
                           renderframes,
-                          commandbuffers
+                          commandbuffers,
+                          command_pool
                           );
 }
 

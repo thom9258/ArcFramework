@@ -8,14 +8,6 @@ namespace ArcGraphics {
 Device::Builder::Builder()
 {
     GlobalContext::Initialize();
-    reset_builder();
-}
-
-Device::Builder::~Builder() = default;
-    
-void Device::Builder::reset_builder()
-{
-    m_validation_layers.clear();
 }
 
 Device::Builder& Device::Builder::add_validation_layers(const ValidationLayers layers)
@@ -30,8 +22,14 @@ Device::Builder& Device::Builder::add_khronos_validation_layer()
     return *this;
 }
 
-std::shared_ptr<Device> Device::Builder::produce()
+Device Device::Builder::produce()
 {
+
+    std::cout << "==================================================\n"
+              << " Producing Device\n"
+              << "=================================================="
+              << std::endl;
+
     const DeviceExtensions device_extensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
@@ -43,6 +41,9 @@ std::shared_ptr<Device> Device::Builder::produce()
                                        50,
                                        SDL_WINDOW_MINIMIZED
                                        | SDL_WINDOW_VULKAN);
+   
+   if (!tmp_window)
+       throw std::runtime_error("could not create temporary window");
     
     const auto extension_properties = get_available_extension_properties();
     std::cout << "Supported Extensions:\n";
@@ -68,27 +69,13 @@ std::shared_ptr<Device> Device::Builder::produce()
     auto capabilities = get_rendering_capabilities(physical_device,
                                                    tmp_window_surface);
 
-    //std::cout << "Window Capabilities:\n"
-    //          << "> current width/Height: " 
-    //          << capabilities.surface_capabilities.currentExtent.width << "/"
-    //          << capabilities.surface_capabilities.currentExtent.height << "\n"
-    //          << "> minimum width/Height: " 
-    //          << capabilities.surface_capabilities.minImageExtent.width << "/"
-    //          << capabilities.surface_capabilities.minImageExtent.height << "\n"
-    //          << "> maximum width/Height: " 
-    //          << capabilities.surface_capabilities.maxImageExtent.width << "/"
-    //          << capabilities.surface_capabilities.maxImageExtent.height 
-    //          << std::endl; 
-        
-
     /* =============================================================
      * Cleanup Temporary Window and Window-Surface
      */
     vkDestroySurfaceKHR(instance, tmp_window_surface, nullptr);
     SDL_DestroyWindow(tmp_window);
     
-    reset_builder();
-    return std::make_shared<Device>(instance, physical_device, logical_device, capabilities);
+    return Device(instance, physical_device, logical_device, capabilities);
 }
 
 const VkInstance& Device::instance() const noexcept
@@ -123,7 +110,7 @@ Device::Device(const VkInstance instance,
 {
 }
 
-Device::~Device()
+void Device::destroy()
 {
     vkDestroyDevice(m_logical_device, nullptr);
     vkDestroyInstance(m_instance, nullptr);

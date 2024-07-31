@@ -1,8 +1,11 @@
 #pragma once
 
 #include "Renderer.hpp"
-#include "BasicBuffer.hpp"
+#include "VertexBuffer.hpp"
+#include "IndexBuffer.hpp"
 #include "UniformBuffer.hpp"
+#include "Algorithm.hpp"
+
 
 #include <vector>
 #include <string>
@@ -42,34 +45,53 @@ class RenderPipeline : public IsNotLvalueCopyable
 public:
     class Builder;
 
-    RenderPipeline(std::shared_ptr<Device> device,    
-                   std::shared_ptr<Renderer> renderer,
+    RenderPipeline(Device* device,    
+                   Renderer* renderer,
                    const VkRenderPass render_pass,
                    const VkDescriptorPool descriptor_pool,
                    const VkDescriptorSetLayout descriptor_layout,
                    const std::vector<VkDescriptorSet> descriptor_sets,
                    const VkPipelineLayout graphics_pipeline_layout,
                    const VkPipeline graphics_pipeline,
+                   const VkExtent2D render_extent,
                    const std::vector<VkFramebuffer> framebuffers,
                    const std::vector<RenderFrame> renderframes,
-                   const std::vector<VkCommandBuffer> commandbuffers
+                   const std::vector<VkCommandBuffer> commandbuffers,
+                   const VkCommandPool command_pool
                    );
 
-    ~RenderPipeline();
+    void draw_frame();
+
+    // TODO: this ugly thing needs to be moved
+    void record_command_buffer(VkCommandBuffer command_buffer,
+                               uint32_t image_index);
+
+    ~RenderPipeline() = default;
+    void destroy();
+    
+    void add_geometry(VertexBuffer* vertex_buffer,
+                      IndexBuffer* index_buffer);
+    
+    const VkCommandPool& command_pool() const;
 
 private:
-    std::shared_ptr<Device> m_device;
-    std::shared_ptr<Renderer> m_renderer;
-    uint32_t m_max_frames_in_flight;
+    // TODO: TEMPORARY BUFFERS TO TEST DRAWING WORKS
+    VertexBuffer* m_vertex_buffer;
+    IndexBuffer* m_index_buffer;
+
+    Device* m_device{nullptr};
+    Renderer* m_renderer{nullptr};
     VkRenderPass m_render_pass;
     VkDescriptorPool m_descriptor_pool;
     VkDescriptorSetLayout m_descriptor_layout;
     std::vector<VkDescriptorSet> m_descriptor_sets;
     VkPipelineLayout m_graphics_pipeline_layout;
     VkPipeline m_graphics_pipeline;
+    VkExtent2D m_render_extent;
     std::vector<VkFramebuffer> m_swap_chain_framebuffers;
     std::vector<RenderFrame> m_renderframes;
     std::vector<VkCommandBuffer> m_commandbuffers;
+    uint32_t m_current_frame{0};
 
     bool m_swap_chain_framebuffer_resized{false};
     VkCommandPool m_command_pool;
@@ -78,33 +100,33 @@ private:
 class RenderPipeline::Builder : protected IsNotLvalueCopyable
 {
 public:
-    Builder(std::shared_ptr<Device> device,
-            std::shared_ptr<Renderer> renderer,
+    Builder(Device* device,
+            Renderer* renderer,
             const ShaderBytecode vertex_bytecode,
             const ShaderBytecode fragment_bytecode);
 
-    ~Builder();
+    ~Builder() = default;
     
     Builder& with_frames_in_flight(const uint32_t frames);
     Builder& with_use_alpha_blending(const bool use);
-    Builder& with_render_size(const uint32_t width,
-                              const uint32_t height);
 
     [[nodiscard]]
     RenderPipeline produce();
     
 private:
-    void reset_builder();
-    
-    uint32_t m_max_frames_in_flight;
+    // TODO: this is not possible at the moment
+    Builder& with_render_size(const uint32_t width,
+                              const uint32_t height);
 
-    std::shared_ptr<Device> m_device;
-    std::shared_ptr<Renderer> m_renderer;
+    uint32_t m_max_frames_in_flight{2};
+
+    Device* m_device{nullptr};
+    Renderer* m_renderer{nullptr};
     ShaderBytecode m_vertex_bytecode;
     ShaderBytecode m_fragment_bytecode;
-    uint32_t m_render_width;
-    uint32_t m_render_height;
-    bool m_use_alpha_blending;
+    uint32_t m_render_width{0};
+    uint32_t m_render_height{0};
+    bool m_use_alpha_blending{false};
 };
    
 }

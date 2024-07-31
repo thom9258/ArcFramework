@@ -612,7 +612,7 @@ GraphicsContext::GraphicsContext(const uint32_t width,
     /* ===================================================================
      * Create Vertex Buffers
      */
-    const std::vector<arc::Vertex> vertices = {
+    const VertexBuffer::vector_type vertices = {
         {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
         {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
         {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
@@ -1071,8 +1071,8 @@ GraphicsContext::~GraphicsContext()
         vkDestroySemaphore(m_logical_device, m_semaphores_rendering_finished[i], nullptr);
         vkDestroyFence(m_logical_device, m_fences_in_flight[i], nullptr);
     }
-    vkDestroyCommandPool(m_logical_device, m_command_pool, nullptr);
 
+    vkDestroyCommandPool(m_logical_device, m_command_pool, nullptr);
     vkDestroyPipeline(m_logical_device, m_graphics_pipeline, nullptr);
     vkDestroyPipelineLayout(m_logical_device, m_graphics_pipeline_layout, nullptr);
     vkDestroyRenderPass(m_logical_device, m_render_pass, nullptr);

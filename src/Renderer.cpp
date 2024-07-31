@@ -1,16 +1,19 @@
 #include "../arc/Renderer.hpp"
 #include "../arc/UniformBuffer.hpp"
 
+#include <iostream>
+
 namespace ArcGraphics {
     
 
-Renderer::Renderer(std::shared_ptr<Device> device,
+Renderer::Renderer(Device* device,
                    SDL_Window* window,
                    const VkSurfaceKHR window_surface,
                    const VkSwapchainKHR swapchain,
                    const std::vector<VkImageView> swapchain_image_views,
                    const VkSurfaceFormatKHR surface_format,
-                   const DeviceRenderingCapabilities capabilities
+                   const DeviceRenderingCapabilities capabilities,
+                   const VkQueue graphics_queue
                    )
     : m_device(device)
     , m_window(window)
@@ -19,12 +22,16 @@ Renderer::Renderer(std::shared_ptr<Device> device,
     , m_swapchain_image_views(swapchain_image_views)
     , m_surface_format(surface_format)
     , m_capabilities(capabilities)
+    , m_graphics_queue(graphics_queue)
 {
+    if (!m_device)
+        throw std::runtime_error("Renderer() device was nullptr!");
+    if (!m_window)
+        throw std::runtime_error("Renderer() window was nullptr!");
 }
 
-Renderer::~Renderer()
+void Renderer::destroy()
 {
-
     //TODO segfault here, because renderer cannot get logical device as Device is freed it seems..
     const auto logical_device = m_device->logical_device();
     for (auto& view: m_swapchain_image_views)
@@ -55,6 +62,11 @@ SDL_Window* const& Renderer::window() const
     return m_window;
 }
 
+const VkQueue& Renderer::graphics_queue() const
+{
+    return m_graphics_queue;
+}
+ 
 const VkSurfaceKHR& Renderer::window_surface() const
 {
     return m_window_surface;
@@ -70,21 +82,13 @@ const VkSurfaceFormatKHR& Renderer::surface_format() const
     return m_surface_format;
 }
 
-Renderer::Builder::Builder(std::shared_ptr<Device> device)
+Renderer::Builder::Builder(Device* device)
+    : m_device(device)
 {
-    reset_builder();
-    m_device = device;
+    if (!m_device)
+        throw std::runtime_error("Renderer() device was nullptr!");
 }
     
-void Renderer::Builder::reset_builder()
-{
-    m_window_name = "Unknown Window";
-    m_window_width = 800;
-    m_window_height = 600;
-    m_window_flags = 0;
-    m_device = nullptr;
-}
-
 Renderer::Builder& Renderer::Builder::with_wanted_window_size(const uint32_t width,
                                                               const uint32_t height)
 {
@@ -105,14 +109,13 @@ Renderer::Builder& Renderer::Builder::with_window_flags(const uint32_t flags)
     return *this;
 }
 
-Renderer::Builder::~Builder()
+Renderer Renderer::Builder::produce()
 {
-    reset_builder();
-}
+    std::cout << "==================================================\n"
+              << " Producing Renderer\n"
+              << "=================================================="
+              << std::endl;
 
-std::shared_ptr<Renderer> Renderer::Builder::produce()
-{
-    
     VkExtent2D window_size;
     window_size.width = m_window_width;
     window_size.height = m_window_height;
@@ -136,17 +139,27 @@ std::shared_ptr<Renderer> Renderer::Builder::produce()
                                               window_surface,
                                               m_window_width,
                                               m_window_height);
-   
-    reset_builder();
+    
+    const auto queue_families = get_queue_families(m_device->physical_device());
+    const auto indices = find_graphics_present_indices(queue_families,
+                                                       m_device->physical_device(),
+                                                       window_surface);
 
-    return std::make_shared<Renderer>(m_device,
-                                      window,
-                                      window_surface,
-                                      swap_chain.swap_chain,
-                                      swap_chain.image_views,
-                                      swap_chain.surface_format,
-                                      capabilities
-                                      );
+    VkQueue graphics_queue{};
+    vkGetDeviceQueue(m_device->logical_device(), 
+                     indices.graphics.value(),
+                     0,
+                     &graphics_queue);
+   
+    return Renderer(m_device,
+                    window,
+                    window_surface,
+                    swap_chain.swap_chain,
+                    swap_chain.image_views,
+                    swap_chain.surface_format,
+                    capabilities,
+                    graphics_queue
+                    );
 }
    
 

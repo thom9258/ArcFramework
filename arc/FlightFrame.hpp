@@ -6,7 +6,7 @@
 
 #include "DeclareNotCopyable.hpp"
 
-namespace arc {
+namespace ArcGraphics {
 
 class FlightFrame : public DeclareNotCopyable
 {

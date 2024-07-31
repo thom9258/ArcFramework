@@ -73,9 +73,6 @@ void create_uniform_buffer(const VkPhysicalDevice& physical_device,
                   info,
                   out_buffer,
                   out_memory);
-    std::cout << "uniform buffer info:\n"
-              << "-> size " << info.size
-              << std::endl;
 
     vkMapMemory(logical_device,
                 out_memory,
@@ -83,10 +80,6 @@ void create_uniform_buffer(const VkPhysicalDevice& physical_device,
                 memsize,
                 0,
                 &out_mapped);
-    // TODO: Reinsert this mapping instead
-    //out_mapped =  get_memory_mapping(logical_device,
-    //                                 memsize,
-    //                                 out_memory);
 }
 
 }

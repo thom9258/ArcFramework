@@ -53,6 +53,7 @@ struct CreatedSwapChain {
 
 struct DeviceRenderingCapabilities {
     // A condensed collection of members from VkSurfaceCapabilitiesKHR
+    VkExtent2D window_extent;
     uint32_t min_image_count;
     uint32_t max_image_count;
     uint32_t max_image_array_layers;

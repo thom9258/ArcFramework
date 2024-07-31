@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 
 #include "TypeTraits.hpp"
+#include "Algorithm.hpp"
 
 #include <memory>
 #include <vector>

@@ -1,6 +1,8 @@
 #include <arc/Device.hpp>
 #include <arc/Renderer.hpp>
 #include <arc/Shader.hpp>
+#include <arc/VertexBuffer.hpp>
+#include <arc/IndexBuffer.hpp>
 
 #include <iostream>
 
@@ -11,16 +13,16 @@ int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
     
-    const auto device = ArcGraphics::Device::Builder()
+    auto device = ArcGraphics::Device::Builder()
         .add_khronos_validation_layer()
         .produce();
     
     std::cout << "device\n"
-              << "  instance id: " << device->instance() << "\n"
-              << "  physical device id: " << device->physical_device() << "\n"
-              << "  logical device id: " << device->logical_device() << std::endl;
+              << "  instance id: " << device.instance() << "\n"
+              << "  physical device id: " << device.physical_device() << "\n"
+              << "  logical device id: " << device.logical_device() << std::endl;
     
-    const auto renderer = ArcGraphics::Renderer::Builder(device)
+    auto renderer = ArcGraphics::Renderer::Builder(&device)
         .with_wanted_window_size(1200, 800)
         .with_window_name("Triangle")
         .with_window_flags(SDL_WINDOW_BORDERLESS | SDL_WINDOW_SHOWN)
@@ -29,41 +31,47 @@ int main(int argc, char** argv) {
     const auto vert = ArcGraphics::read_shader_bytecode("../triangle.vert.spv");
     const auto frag = ArcGraphics::read_shader_bytecode("../triangle.frag.spv");
 
-    const auto render_pipeline =
-        ArcGraphics::RenderPipeline::Builder(device, renderer, vert, frag)
+    auto render_pipeline =
+        ArcGraphics::RenderPipeline::Builder(&device, &renderer, vert, frag)
         .with_frames_in_flight(3)
         .produce();
     
 
-    //const VertexBuffer::vector_type vertices = {
-    //    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    //    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    //    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    //    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
-    //};
-    // m_vertex_buffer = VertexBuffer::create_staging(m_physical_device,
-    //                                               m_logical_device,
-    //                                               m_command_pool,
-    //                                               m_graphics_queue,
-    //                                               vertices);
-    //
-    //if (m_vertex_buffer == nullptr)
-    //        throw std::runtime_error("Failed to create vertex buffer!");
-    //
-    //const IndexBuffer::vector_type indices = {
-    //    0, 1, 2, 2, 3, 0
-    //};
-    //
-    //
-    //m_index_buffer = IndexBuffer::create(m_physical_device,
-    //                                               m_logical_device,
-    //                                               indices);
-    //
-    //if (m_index_buffer == nullptr)
-    //        throw std::runtime_error("Failed to create index buffer!");
+    std::cout << "===========================================\n"
+              << " Produced the entire pipeline\n"
+              << "===========================================\n"
+              << std::endl;
+
+    const ArcGraphics::VertexBuffer::vector_type vertices = {
+        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+    };
+    const ArcGraphics::IndexBuffer::vector_type indices = {
+        0, 1, 2, 2, 3, 0
+    };
+
+    auto vertex_buffer =
+        ArcGraphics::VertexBuffer::create_staging(device.physical_device(),
+                                                  device.logical_device(),
+                                                  render_pipeline.command_pool(),
+                                                  renderer.graphics_queue(),
+                                                  vertices);
+    
+    if (vertex_buffer == nullptr)
+        throw std::runtime_error("Failed to create vertex buffer!");
+    
+    auto index_buffer = ArcGraphics::IndexBuffer::create(device.physical_device(),
+                                                         device.logical_device(),
+                                                         indices);
+    
+    if (index_buffer == nullptr)
+        throw std::runtime_error("Failed to create index buffer!");
+    
+    render_pipeline.add_geometry(vertex_buffer.get(), index_buffer.get());
+    
  
-
-
     bool exit = false;
     SDL_Event event;
     while (!exit) {
@@ -103,6 +111,12 @@ int main(int argc, char** argv) {
         /* =======================================================
          * Draw Frame
          */
-        //context.draw_frame();
+        render_pipeline.draw_frame();
     }
+    
+    render_pipeline.destroy();
+    renderer.destroy();
+    device.destroy();
+
+    
 }

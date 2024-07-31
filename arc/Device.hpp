@@ -24,7 +24,9 @@ public:
            const VkDevice logical_device,
            const DeviceRenderingCapabilities capabilities);
 
-    ~Device();
+    void destroy();
+
+    ~Device() = default;
 
     [[nodiscard]]
     const VkInstance& instance() const noexcept;
@@ -49,15 +51,14 @@ class Device::Builder : protected IsNotLvalueCopyable
 {
 public:
     Builder();
-    ~Builder();
+    ~Builder() = default;
 
     Builder& add_validation_layers(const ValidationLayers layers);
     Builder& add_khronos_validation_layer();
 
-    std::shared_ptr<Device> produce();
+    Device produce();
     
 private:
-    void reset_builder();
     ValidationLayers m_validation_layers{};
 };
  
