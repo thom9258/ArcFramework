@@ -56,9 +56,11 @@ VkDescriptorSetLayout create_uniform_vertex_descriptorset_layout(const VkDevice&
                                                VK_SHADER_STAGE_VERTEX_BIT);
 }
     
+    
+
 void create_uniform_buffer(const VkPhysicalDevice& physical_device,
                            const VkDevice& logical_device,
-                           const VkDeviceSize& memsize,
+                           const VkDeviceSize memsize,
                            VkBuffer& out_buffer,
                            VkDeviceMemory& out_memory,
                            void*& out_mapped)
@@ -81,5 +83,55 @@ void create_uniform_buffer(const VkPhysicalDevice& physical_device,
                 0,
                 &out_mapped);
 }
+    
+UniformBuffer::UniformBuffer(VkBuffer buffer,
+                             VkDeviceMemory memory,
+                             void* mapping,
+                             VkDeviceSize size
+                             )
+    : m_buffer(buffer)
+    , m_memory(memory)
+    , m_mapping(mapping)
+    , m_size(size)
+{
+}
+    
+std::unique_ptr<UniformBuffer> UniformBuffer::create(const VkPhysicalDevice& physical_device,
+                                                     const VkDevice& logical_device,
+                                                     const VkDeviceSize memsize)
+{
+    try {
+        VkBuffer buffer;
+        VkDeviceMemory memory;
+        void* mapping;
+        create_uniform_buffer(physical_device,
+                              logical_device,
+                              memsize,
+                              buffer,
+                              memory,
+                              mapping);
+
+        return std::make_unique<UniformBuffer>(buffer, memory, mapping, memsize);
+    }
+    catch (const std::runtime_error&) {
+    }
+    return nullptr;
+}
+    
+void UniformBuffer::destroy(const VkDevice& logical_device)
+{
+    vkDestroyBuffer(logical_device, m_buffer, nullptr);
+    vkFreeMemory(logical_device, m_memory, nullptr);
+}
+    
+VkDescriptorBufferInfo UniformBuffer::descriptor_buffer_info()
+{
+        VkDescriptorBufferInfo info{};
+        info.buffer = m_buffer;
+        info.offset = 0;
+        info.range = m_size;
+        return info;
+}
+
 
 }

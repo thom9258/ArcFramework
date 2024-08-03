@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
-#include <glm/glm.hpp>
 
 #include "TypeTraits.hpp"
 #include "Algorithm.hpp"
@@ -50,14 +49,14 @@ void memcopy_to_buffer(const VkDevice& logical_device,
    
 
 template<typename T>
-concept BufferPolicy = requires
+concept BasicBufferPolicy = requires
 {
     { T::buffer_type_bit };
     { std::same_as<decltype(T::buffer_type_bit), uint32_t> };
     //{ T::value_type }; // TODO: is it possible to check for using directives in concepts?
 };
    
-template <BufferPolicy Policy>
+template <BasicBufferPolicy Policy>
 class BasicBuffer : public IsNotLvalueCopyable 
 {
 public:
@@ -98,7 +97,7 @@ private:
     size_t m_count;
 };
     
-template <BufferPolicy Policy>
+template <BasicBufferPolicy Policy>
 std::unique_ptr<BasicBuffer<Policy>> BasicBuffer<Policy>::create(
     const VkPhysicalDevice& physical_device,
     const VkDevice& logical_device,
@@ -123,7 +122,7 @@ std::unique_ptr<BasicBuffer<Policy>> BasicBuffer<Policy>::create(
     return buffer;
 }
     
-template <BufferPolicy Policy>
+template <BasicBufferPolicy Policy>
 std::unique_ptr<BasicBuffer<Policy>>
 BasicBuffer<Policy>::create_staging(const VkPhysicalDevice& physical_device,
                                     const VkDevice& logical_device,
@@ -171,32 +170,32 @@ BasicBuffer<Policy>::create_staging(const VkPhysicalDevice& physical_device,
     return buffer;
 }
     
-template <BufferPolicy Policy>
+template <BasicBufferPolicy Policy>
 BasicBuffer<Policy>::BasicBuffer(const VkDevice& logical_device)
     : m_logical_device(logical_device)
 {
 }
  
-template <BufferPolicy Policy>
+template <BasicBufferPolicy Policy>
 BasicBuffer<Policy>::~BasicBuffer()
 {
     vkDestroyBuffer(m_logical_device, m_buffer, nullptr);
     vkFreeMemory(m_logical_device, m_memory, nullptr);
 }
    
-template <BufferPolicy Policy>
+template <BasicBufferPolicy Policy>
 VkBuffer BasicBuffer<Policy>::get_buffer()
 {
     return m_buffer;
 }
 
-template <BufferPolicy Policy>
+template <BasicBufferPolicy Policy>
 size_t BasicBuffer<Policy>::get_memsize()
 {
     return m_info.size;
 }
 
-template <BufferPolicy Policy>
+template <BasicBufferPolicy Policy>
 size_t BasicBuffer<Policy>::get_count()
 {
     return m_count;

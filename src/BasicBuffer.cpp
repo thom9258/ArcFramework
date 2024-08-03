@@ -132,5 +132,6 @@ void memcopy_to_buffer(const VkDevice& logical_device,
     memcpy(mapping, src, static_cast<size_t>(memsize));
     vkUnmapMemory(logical_device, dst); 
 }
+    
 
 }

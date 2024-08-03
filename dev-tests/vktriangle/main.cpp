@@ -69,8 +69,26 @@ int main(int argc, char** argv) {
     if (index_buffer == nullptr)
         throw std::runtime_error("Failed to create index buffer!");
     
-    render_pipeline.add_geometry(vertex_buffer.get(), index_buffer.get());
-    
+
+    ArcGraphics::DrawableGeometry triangle;
+    triangle.vertices = vertex_buffer.get();
+    triangle.indices = index_buffer.get();
+    triangle.model = glm::rotate(glm::mat4(1.0f),
+                                 glm::radians(90.0f),
+                                 glm::vec3(0.0f, 0.0f, 1.0f));
+
+    ArcGraphics::ViewPort viewport{};
+    viewport.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f),
+                           glm::vec3(0.0f, 0.0f, 0.0f),
+                           glm::vec3(0.0f, 0.0f, 1.0f));
+
+    const auto rendersize = render_pipeline.render_size();
+    viewport.proj = glm::perspective(glm::radians(45.0f),
+                                rendersize.width / (float)rendersize.height,
+                                0.1f,
+                                10.0f);
+    viewport.proj[1][1] *= -1;
+
  
     bool exit = false;
     SDL_Event event;
@@ -111,6 +129,8 @@ int main(int argc, char** argv) {
         /* =======================================================
          * Draw Frame
          */
+        render_pipeline.start_frame(viewport);
+        render_pipeline.add_geometry(triangle);
         render_pipeline.draw_frame();
     }
     

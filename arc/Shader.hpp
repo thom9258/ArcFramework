@@ -6,7 +6,6 @@
 #include "UniformBuffer.hpp"
 #include "Algorithm.hpp"
 
-
 #include <vector>
 #include <string>
 
@@ -14,6 +13,11 @@
 namespace ArcGraphics {
     
 //TODO: temporary object to provide viewport in shaders    
+struct ViewPort {
+    glm::mat4 view;
+    glm::mat4 proj;
+};
+
 struct UniformBufferObject {
     glm::mat4 model;
     glm::mat4 view;
@@ -29,16 +33,25 @@ ShaderBytecode read_shader_bytecode(const std::string& filename);
 VkShaderModule compile_shader_bytecode(const VkDevice logical_device,
                                        const ShaderBytecode bytecode);
     
- struct RenderFrame {
-    VkBuffer uniform_buffer;
-    VkDeviceMemory uniform_buffer_memory;
-    void* uniform_buffer_mapped;
-    //VkCommandBuffer command_buffer;
+ struct RenderFrameLocks {
+    //std::unique_ptr<UniformBuffer> uniform_buffer{nullptr};
+    //VkBuffer uniform_buffer;
+    //VkDeviceMemory uniform_buffer_memory;
+    //void* uniform_buffer_mapped;
     VkSemaphore semaphore_image_available;
     VkSemaphore semaphore_rendering_finished;
     VkFence fence_in_flight;
 };
     
+struct DrawableGeometry {
+    DrawableGeometry();
+    DrawableGeometry(glm::mat4 model,
+                     VertexBuffer* vertices,
+                     IndexBuffer* indices);
+    glm::mat4 model;
+    VertexBuffer* vertices;
+    IndexBuffer* indices;
+};
 
 class RenderPipeline : public IsNotLvalueCopyable
 {
@@ -55,29 +68,32 @@ public:
                    const VkPipeline graphics_pipeline,
                    const VkExtent2D render_extent,
                    const std::vector<VkFramebuffer> framebuffers,
-                   const std::vector<RenderFrame> renderframes,
+                   const std::vector<RenderFrameLocks> framelocks,
+                   const std::vector<std::shared_ptr<UniformBuffer>> uniformbuffers,
                    const std::vector<VkCommandBuffer> commandbuffers,
                    const VkCommandPool command_pool
                    );
+    
+    VkExtent2D render_size() const;
+    std::optional<uint32_t> wait_for_next_frame();
 
+    void start_frame(const ViewPort viewport);
+    void add_geometry(const DrawableGeometry geometry);
     void draw_frame();
 
     // TODO: this ugly thing needs to be moved
-    void record_command_buffer(VkCommandBuffer command_buffer,
+    void record_command_buffer(const std::vector<DrawableGeometry> geometries,
+                               VkCommandBuffer command_buffer,
                                uint32_t image_index);
 
     ~RenderPipeline() = default;
     void destroy();
     
-    void add_geometry(VertexBuffer* vertex_buffer,
-                      IndexBuffer* index_buffer);
-    
     const VkCommandPool& command_pool() const;
 
 private:
-    // TODO: TEMPORARY BUFFERS TO TEST DRAWING WORKS
-    VertexBuffer* m_vertex_buffer;
-    IndexBuffer* m_index_buffer;
+    ViewPort m_viewport;
+    std::vector<DrawableGeometry> m_geometries;
 
     Device* m_device{nullptr};
     Renderer* m_renderer{nullptr};
@@ -89,7 +105,8 @@ private:
     VkPipeline m_graphics_pipeline;
     VkExtent2D m_render_extent;
     std::vector<VkFramebuffer> m_swap_chain_framebuffers;
-    std::vector<RenderFrame> m_renderframes;
+    std::vector<RenderFrameLocks> m_framelocks;
+    std::vector<std::shared_ptr<UniformBuffer>> m_uniformbuffers;
     std::vector<VkCommandBuffer> m_commandbuffers;
     uint32_t m_current_frame{0};
 
