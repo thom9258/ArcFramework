@@ -18,11 +18,13 @@ struct ViewPort {
     glm::mat4 proj;
 };
 
+/*
 struct UniformBufferObject {
     glm::mat4 model;
     glm::mat4 view;
     glm::mat4 proj;
 };
+*/
 
 using ShaderBytecode = std::vector<char>;
 
@@ -34,10 +36,6 @@ VkShaderModule compile_shader_bytecode(const VkDevice logical_device,
                                        const ShaderBytecode bytecode);
     
  struct RenderFrameLocks {
-    //std::unique_ptr<UniformBuffer> uniform_buffer{nullptr};
-    //VkBuffer uniform_buffer;
-    //VkDeviceMemory uniform_buffer_memory;
-    //void* uniform_buffer_mapped;
     VkSemaphore semaphore_image_available;
     VkSemaphore semaphore_rendering_finished;
     VkFence fence_in_flight;
@@ -69,7 +67,10 @@ public:
                    const VkExtent2D render_extent,
                    const std::vector<VkFramebuffer> framebuffers,
                    const std::vector<RenderFrameLocks> framelocks,
-                   const std::vector<std::shared_ptr<UniformBuffer>> uniformbuffers,
+                   //const std::vector<std::shared_ptr<BasicUniformBuffer>> uniformbuffers,
+                   const std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_viewport,
+                   const std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_model,
+
                    const std::vector<VkCommandBuffer> commandbuffers,
                    const VkCommandPool command_pool
                    );
@@ -106,7 +107,9 @@ private:
     VkExtent2D m_render_extent;
     std::vector<VkFramebuffer> m_swap_chain_framebuffers;
     std::vector<RenderFrameLocks> m_framelocks;
-    std::vector<std::shared_ptr<UniformBuffer>> m_uniformbuffers;
+    //std::vector<std::shared_ptr<BasicUniformBuffer>> m_uniformbuffers;
+    std::vector<std::shared_ptr<BasicUniformBuffer>> m_uniform_viewports;
+    std::vector<std::shared_ptr<BasicUniformBuffer>> m_uniform_models;
     std::vector<VkCommandBuffer> m_commandbuffers;
     uint32_t m_current_frame{0};
 
