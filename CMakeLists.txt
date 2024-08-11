@@ -18,6 +18,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/glm)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/stb)
 find_package(SDL2 REQUIRED)
 
 # https://vulkan.lunarg.com/doc/view/latest/linux/getting_started_ubuntu.html
@@ -33,6 +34,7 @@ set(ARC_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/src/VertexBuffer.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/IndexBuffer.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/UniformBuffer.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/Texture.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/FlightFrame.cpp
 )
     
@@ -48,6 +50,7 @@ set(ARC_INCLUDES
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/VertexBuffer.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/IndexBuffer.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/UniformBuffer.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/arc/Texture.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/arc/FlightFrame.hpp
 )
 
@@ -57,7 +60,7 @@ target_sources(${PROJECT_NAME} PRIVATE ${ARC_SOURCES})
 
 include_directories(${PROJECT_NAME} ${SDL2_INCLUDE_DIRS} ${Vulkan_INCLUDE_DIRS})
 
-target_link_libraries(${PROJECT_NAME} PUBLIC glm ${SDL2_LIBRARIES} Vulkan::Vulkan)
+target_link_libraries(${PROJECT_NAME} PUBLIC glm STB ${SDL2_LIBRARIES} Vulkan::Vulkan)
 
 target_include_directories(${PROJECT_NAME}
   PUBLIC

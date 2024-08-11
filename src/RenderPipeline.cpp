@@ -1,4 +1,4 @@
-#include "../arc/Shader.hpp"
+#include "../arc/RenderPipeline.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -94,7 +94,7 @@ const VkCommandPool& RenderPipeline::command_pool() const
 {
     return m_command_pool;
 }
-
+    
 void RenderPipeline::record_command_buffer(const std::vector<DrawableGeometry> geometries,
                                            VkCommandBuffer command_buffer,
                                            uint32_t image_index) 
@@ -137,7 +137,7 @@ void RenderPipeline::record_command_buffer(const std::vector<DrawableGeometry> g
     renderpass_info.renderPass = m_render_pass;
     renderpass_info.framebuffer = m_swap_chain_framebuffers[image_index];
     renderpass_info.renderArea.offset = {0, 0};
-    renderpass_info.renderArea.extent = m_render_extent;
+    renderpass_info.renderArea.extent = m_render_size;
 
     VkClearValue clear_color = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
     renderpass_info.clearValueCount = 1;
@@ -149,15 +149,15 @@ void RenderPipeline::record_command_buffer(const std::vector<DrawableGeometry> g
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = static_cast<float>(m_render_extent.width);
-    viewport.height = static_cast<float>(m_render_extent.height);
+    viewport.width = static_cast<float>(m_render_size.width);
+    viewport.height = static_cast<float>(m_render_size.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(command_buffer, 0, 1, &viewport);
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = m_render_extent;
+    scissor.extent = m_render_size;
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
     
 
@@ -171,14 +171,12 @@ void RenderPipeline::record_command_buffer(const std::vector<DrawableGeometry> g
         if (!geometry.indices)
             throw std::runtime_error("index buffer ptr was nullptr!");
 
-        //UniformBufferObject ubo{};
-        //ubo.view = m_viewport.view;
-        //ubo.proj = m_viewport.proj;
-        //ubo.model = geometry.model;
-        //m_uniformbuffers[m_current_frame]->set_uniform(&ubo);
-
         /* Bind Viewport
          */
+        ViewPort viewport{};
+        viewport.view = m_view;
+        viewport.proj = m_projection;
+        viewport.model = geometry.model;
         m_uniform_viewports[m_current_frame]->set_uniform(&viewport);
 
         // https://community.khronos.org/t/how-to-pass-two-uniform-bbuffers-in-shader/106753/2
@@ -191,18 +189,6 @@ void RenderPipeline::record_command_buffer(const std::vector<DrawableGeometry> g
                                 0,
                                 nullptr);
 
-        glm::mat4 model = geometry.model;
-        m_uniform_models[m_current_frame]->set_uniform(&model);
-
-        vkCmdBindDescriptorSets(command_buffer,
-                                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                m_graphics_pipeline_layout,
-                                1,
-                                1,
-                                &m_descriptor_sets[m_current_frame],
-                                0,
-                                nullptr);
-        
         /* Bind Vertices and Indices
          */
         VkBuffer vertex_buffers[] = {geometry.vertices->get_buffer()};
@@ -233,13 +219,14 @@ void RenderPipeline::record_command_buffer(const std::vector<DrawableGeometry> g
 
 VkExtent2D RenderPipeline::render_size() const
 {
-    return m_render_extent;
+    return m_render_size;
 }
 
-void RenderPipeline::start_frame(const ViewPort viewport)
+void RenderPipeline::start_frame(const glm::mat4 view, const glm::mat4 projection)
 {
     m_geometries.clear();
-    m_viewport = viewport;
+    m_view = view;
+    m_projection = projection;
 }
 
 void RenderPipeline::add_geometry(const DrawableGeometry geometry)
@@ -354,12 +341,10 @@ RenderPipeline::RenderPipeline(Device* device,
     const std::vector<VkDescriptorSet> descriptor_sets,
     const VkPipelineLayout graphics_pipeline_layout,
     const VkPipeline graphics_pipeline,
-    const VkExtent2D render_extent,
+    const VkExtent2D render_size,
     const std::vector<VkFramebuffer> framebuffers,
     const std::vector<RenderFrameLocks> framelocks,
-    //const std::vector<std::shared_ptr<BasicUniformBuffer>> uniformbuffers,
     const std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_viewport,
-    const std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_model,
     const std::vector<VkCommandBuffer> commandbuffers,
     const VkCommandPool command_pool)
     : m_device(device)
@@ -370,11 +355,10 @@ RenderPipeline::RenderPipeline(Device* device,
     , m_descriptor_sets(descriptor_sets)
     , m_graphics_pipeline_layout(graphics_pipeline_layout)
     , m_graphics_pipeline(graphics_pipeline)
-    , m_render_extent(render_extent)
+    , m_render_size(render_size)
     , m_swap_chain_framebuffers(framebuffers)
     , m_framelocks(framelocks)
     , m_uniform_viewports(uniform_viewport)
-    , m_uniform_models(uniform_model)
     , m_commandbuffers(commandbuffers)
     , m_command_pool(command_pool)
 {
@@ -394,6 +378,7 @@ void RenderPipeline::destroy()
         vkDestroyFramebuffer(logical_device, framebuffer, nullptr);
 
     vkDestroyDescriptorPool(logical_device, m_descriptor_pool, nullptr);
+
     vkDestroyDescriptorSetLayout(logical_device, m_descriptor_layout, nullptr);
    
     for (size_t i = 0; i < m_framelocks.size(); i++) {
@@ -438,8 +423,10 @@ RenderPipeline::Builder& RenderPipeline::Builder::with_frames_in_flight(const ui
 RenderPipeline::Builder& RenderPipeline::Builder::with_render_size(const uint32_t width,
                                                                    const uint32_t height)
 {
-    m_render_width = width;
-    m_render_height = height;
+    VkExtent2D tmp;
+    tmp.width = static_cast<uint32_t>(width);
+    tmp.height = static_cast<uint32_t>(height);
+    m_render_size = tmp;
     return *this;
 }
 
@@ -507,21 +494,18 @@ RenderPipeline RenderPipeline::Builder::produce()
     dynamic_state.pDynamicStates = dynamic_states.data();
     
     
-    VkExtent2D render_extent;
-    if (m_render_width == 0 || m_render_height == 0)
-        render_extent = m_renderer->window_size();
-    else
-        render_extent = {m_render_width, m_render_height};
+    const auto render_size = m_render_size.value_or(m_renderer->window_size());
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = render_extent;
+    scissor.extent = render_size;
     
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)render_extent.width;
-    viewport.height = (float)render_extent.height;
+
+    viewport.width = (float)render_size.width;
+    viewport.height = (float)render_size.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     
@@ -532,6 +516,8 @@ RenderPipeline RenderPipeline::Builder::produce()
     viewport_state.scissorCount = 1;
     viewport_state.pScissors = &scissor;
     
+    // TODO: In time moving all the *Info structs to be members of the builder could be ideal,
+    //so that we modify stuff in those and then in produce just do all the creation calls.
     VkPipelineRasterizationStateCreateInfo rasterizer{};
     rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizer.depthClampEnable = VK_FALSE;
@@ -548,8 +534,11 @@ RenderPipeline RenderPipeline::Builder::produce()
     /* ===================================================================
      * Create Pipeline Layout
      */
-    // Here we add our uniform buffer layouts
-    const auto descriptor_layout = 
+
+    //TODO BUG: I think this is the place where i cannot define multiple
+    //          Uniform buffers?
+    //https://gist.github.com/SaschaWillems/428d15ed4b5d71ead462bc63adffa93a
+    VkDescriptorSetLayout descriptor_layout = 
         create_uniform_vertex_descriptorset_layout(m_device->logical_device(), 0, 1);
     
     VkPipelineLayoutCreateInfo pipeline_layout_info{};
@@ -580,7 +569,8 @@ RenderPipeline RenderPipeline::Builder::produce()
     VkDescriptorSetAllocateInfo descriptor_pool_alloc_info{};
     descriptor_pool_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     descriptor_pool_alloc_info.descriptorPool = descriptor_pool;
-    descriptor_pool_alloc_info.descriptorSetCount = m_max_frames_in_flight;
+    descriptor_pool_alloc_info.descriptorSetCount = 
+        static_cast<uint32_t>(layouts.size());
     descriptor_pool_alloc_info.pSetLayouts = layouts.data();
 
     std::vector<VkDescriptorSet> descriptor_sets(m_max_frames_in_flight);
@@ -596,29 +586,15 @@ RenderPipeline RenderPipeline::Builder::produce()
     /* ===================================================================
      * Create Uniform Buffers
      */
-    //std::vector<std::shared_ptr<BasicUniformBuffer>> uniformbuffer;
     std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_viewports;
-    std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_models;
 
     for (size_t i = 0; i < m_max_frames_in_flight; i++) {
-        //auto uniform = BasicUniformBuffer::create(m_device->physical_device(),
-        //                                           m_device->logical_device(),
-        //                                           sizeof(UniformBufferObject));
-        //uniformbuffer.push_back(std::shared_ptr<BasicUniformBuffer>(uniform.release()));
-
         auto uniform = BasicUniformBuffer::create(m_device->physical_device(),
-                                                   m_device->logical_device(),
-                                                   sizeof(ViewPort));
+                                                  m_device->logical_device(),
+                                                  sizeof(ViewPort));
         uniform_viewports.push_back(std::shared_ptr<BasicUniformBuffer>(uniform.release()));
     }
-
-    for (size_t i = 0; i < m_max_frames_in_flight; i++) {
-        auto uniform = BasicUniformBuffer::create(m_device->physical_device(),
-                                                m_device->logical_device(),
-                                                sizeof(glm::mat4));
-        uniform_models.push_back(std::shared_ptr<BasicUniformBuffer>(uniform.release()));
-    }
-    
+   
     std::cout << "created uniform buffers" << std::endl;
     
     for (size_t i = 0; i < m_max_frames_in_flight; i++) {
@@ -643,28 +619,6 @@ RenderPipeline RenderPipeline::Builder::produce()
                                &descriptor_write,
                                0,
                                nullptr);
-
-        // Setup Descriptor buffer for Model
-        buffer_info = uniform_models[i]->descriptor_buffer_info();
-        
-        descriptor_write = VkWriteDescriptorSet{};
-        descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_write.dstSet = descriptor_sets[i];
-        descriptor_write.dstBinding = 0;
-        descriptor_write.dstArrayElement = 0;
-        descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptor_write.descriptorCount = 1;
-        descriptor_write.pBufferInfo = &buffer_info;
-        descriptor_write.pImageInfo = nullptr; // Optional
-        descriptor_write.pTexelBufferView = nullptr; // Optional
-
-        count = 1;
-        vkUpdateDescriptorSets(m_device->logical_device(),
-                               count,
-                               &descriptor_write,
-                               0,
-                               nullptr);
-
     }
 
     std::cout << "Allocated uniform buffers!" << std::endl;
@@ -780,8 +734,8 @@ RenderPipeline RenderPipeline::Builder::produce()
         framebuffer_info.renderPass = render_pass;
         framebuffer_info.attachmentCount = 1;
         framebuffer_info.pAttachments = attachments;
-        framebuffer_info.width = render_extent.width;
-        framebuffer_info.height = render_extent.height;
+        framebuffer_info.width = render_size.width;
+        framebuffer_info.height = render_size.height;
         framebuffer_info.layers = 1;
         auto status = vkCreateFramebuffer(m_device->logical_device(),
                                           &framebuffer_info,
@@ -893,12 +847,10 @@ RenderPipeline RenderPipeline::Builder::produce()
                           descriptor_sets,
                           graphics_pipeline_layout,
                           graphics_pipeline,
-                          render_extent,
+                          render_size,
                           swapchain_framebuffers,
                           framelocks,
-                          //uniformbuffers,
                           uniform_viewports,
-                          uniform_models,
                           commandbuffers,
                           command_pool
                           );

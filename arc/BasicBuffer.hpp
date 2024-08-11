@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 #include <array>
+#include <functional>
 #include <string.h>
 
 namespace ArcGraphics {
@@ -29,6 +30,11 @@ void create_buffer(const VkPhysicalDevice& physical_device,
                    VkBufferCreateInfo& out_info,
                    VkBuffer& out_buffer,
                    VkDeviceMemory& out_memory);
+    
+void with_single_use_command_buffer(const VkDevice& logical_device,
+                                    const VkCommandPool& command_pool,
+                                    const VkQueue graphics_queue,
+                                    std::function<void(VkCommandBuffer&)>&& f);
 
 void copy_buffer(const VkDevice& logical_device,
                  const VkCommandPool& command_pool,
@@ -36,16 +42,32 @@ void copy_buffer(const VkDevice& logical_device,
                  const VkDeviceSize& size,
                  const VkBuffer& src,
                  VkBuffer& dst);
+   
+ void transition_image_layout(const VkDevice& logical_device,
+                             const VkCommandPool& command_pool,
+                             const VkQueue& graphics_queue,
+                             VkImage image,
+                             VkFormat /*format*/,
+                             VkImageLayout oldLayout,
+                             VkImageLayout newLayout);
 
-[[nodiscard]]
-void* get_memory_mapping(const VkDevice& logical_device,
-                         const uint32_t size,
-                         const VkDeviceMemory& target_memory);
-    
+void copy_buffer_to_image(const VkDevice& logical_device,
+                          const VkCommandPool& command_pool,
+                          const VkQueue& graphics_queue,
+                          VkBuffer buffer,
+                          VkImage image,
+                          uint32_t width,
+                          uint32_t height);
+
 void memcopy_to_buffer(const VkDevice& logical_device,
                        const void* src,
                        const VkDeviceSize& memsize,
                        VkDeviceMemory& dst);
+    
+void with_memory_mapping(const VkDevice& logical_device,
+                         const VkDeviceSize size,
+                         const VkDeviceMemory& target_memory,
+                         const std::function<void(void*)> lambda);
    
 
 template<typename T>

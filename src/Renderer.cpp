@@ -9,6 +9,8 @@ namespace ArcGraphics {
 Renderer::Renderer(Device* device,
                    SDL_Window* window,
                    const VkSurfaceKHR window_surface,
+                   const uint32_t window_width,
+                   const uint32_t window_height,
                    const VkSwapchainKHR swapchain,
                    const std::vector<VkImageView> swapchain_image_views,
                    const VkSurfaceFormatKHR surface_format,
@@ -18,6 +20,8 @@ Renderer::Renderer(Device* device,
     : m_device(device)
     , m_window(window)
     , m_window_surface(window_surface)
+    , m_window_width(window_width)
+    , m_window_height(window_height)
     , m_swapchain(swapchain)
     , m_swapchain_image_views(swapchain_image_views)
     , m_surface_format(surface_format)
@@ -72,6 +76,15 @@ const VkSurfaceKHR& Renderer::window_surface() const
     return m_window_surface;
 }
     
+
+VkExtent2D Renderer::window_size() const
+{
+    VkExtent2D size;
+    size.width = m_window_width;
+    size.height = m_window_height;
+    return size;
+}
+    
 const VkSwapchainKHR& Renderer::swapchain() const
 {
     return m_swapchain;
@@ -116,17 +129,13 @@ Renderer Renderer::Builder::produce()
               << "=================================================="
               << std::endl;
 
-    VkExtent2D window_size;
-    window_size.width = m_window_width;
-    window_size.height = m_window_height;
-
     const auto capabilities = m_device->capabilities();
 
     auto window = SDL_CreateWindow(m_window_name.c_str(),
                                    SDL_WINDOWPOS_UNDEFINED,
                                    SDL_WINDOWPOS_UNDEFINED,
-                                   window_size.width,
-                                   window_size.height,
+                                   m_window_width,
+                                   m_window_height,
                                    m_window_flags | SDL_WINDOW_VULKAN);
    
     VkSurfaceKHR window_surface;
@@ -154,6 +163,8 @@ Renderer Renderer::Builder::produce()
     return Renderer(m_device,
                     window,
                     window_surface,
+                    m_window_width,
+                    m_window_height,
                     swap_chain.swap_chain,
                     swap_chain.image_views,
                     swap_chain.surface_format,

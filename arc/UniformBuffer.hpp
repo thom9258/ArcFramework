@@ -31,14 +31,14 @@ void create_uniform_buffer(const VkPhysicalDevice& physical_device,
                            void*& out_mapped);
 
 
-class UniformBuffer : IsNotLvalueCopyable
+class BasicUniformBuffer : IsNotLvalueCopyable
 {
 public:
-    static std::unique_ptr<UniformBuffer> create(const VkPhysicalDevice& physical_device,
-                                                 const VkDevice& logical_device,
-                                                 const VkDeviceSize memsize);
+    static std::unique_ptr<BasicUniformBuffer> create(const VkPhysicalDevice& physical_device,
+                                                      const VkDevice& logical_device,
+                                                      const VkDeviceSize memsize);
 
-    UniformBuffer(VkBuffer buffer,
+    BasicUniformBuffer(VkBuffer buffer,
                   VkDeviceMemory memory,
                   void* mapping,
                   VkDeviceSize size
@@ -47,11 +47,14 @@ public:
     void destroy(const VkDevice& logical_device);
     
     VkDescriptorBufferInfo descriptor_buffer_info();
+
+    void set_uniform(void* src);
+
 private:
     VkBuffer m_buffer;
     VkDeviceMemory m_memory;
     void* m_mapping;
     VkDeviceSize m_size;
 };
-
+    
 }

@@ -16,15 +16,8 @@ namespace ArcGraphics {
 struct ViewPort {
     glm::mat4 view;
     glm::mat4 proj;
-};
-
-/*
-struct UniformBufferObject {
     glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
 };
-*/
 
 using ShaderBytecode = std::vector<char>;
 
@@ -64,13 +57,10 @@ public:
                    const std::vector<VkDescriptorSet> descriptor_sets,
                    const VkPipelineLayout graphics_pipeline_layout,
                    const VkPipeline graphics_pipeline,
-                   const VkExtent2D render_extent,
+                   const VkExtent2D render_size,
                    const std::vector<VkFramebuffer> framebuffers,
                    const std::vector<RenderFrameLocks> framelocks,
-                   //const std::vector<std::shared_ptr<BasicUniformBuffer>> uniformbuffers,
                    const std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_viewport,
-                   const std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_model,
-
                    const std::vector<VkCommandBuffer> commandbuffers,
                    const VkCommandPool command_pool
                    );
@@ -78,7 +68,7 @@ public:
     VkExtent2D render_size() const;
     std::optional<uint32_t> wait_for_next_frame();
 
-    void start_frame(const ViewPort viewport);
+    void start_frame(const glm::mat4 view, const glm::mat4 projection);
     void add_geometry(const DrawableGeometry geometry);
     void draw_frame();
 
@@ -86,6 +76,8 @@ public:
     void record_command_buffer(const std::vector<DrawableGeometry> geometries,
                                VkCommandBuffer command_buffer,
                                uint32_t image_index);
+    
+    
 
     ~RenderPipeline() = default;
     void destroy();
@@ -93,7 +85,8 @@ public:
     const VkCommandPool& command_pool() const;
 
 private:
-    ViewPort m_viewport;
+    glm::mat4 m_view;
+    glm::mat4 m_projection;
     std::vector<DrawableGeometry> m_geometries;
 
     Device* m_device{nullptr};
@@ -104,12 +97,10 @@ private:
     std::vector<VkDescriptorSet> m_descriptor_sets;
     VkPipelineLayout m_graphics_pipeline_layout;
     VkPipeline m_graphics_pipeline;
-    VkExtent2D m_render_extent;
+    VkExtent2D m_render_size;
     std::vector<VkFramebuffer> m_swap_chain_framebuffers;
     std::vector<RenderFrameLocks> m_framelocks;
-    //std::vector<std::shared_ptr<BasicUniformBuffer>> m_uniformbuffers;
     std::vector<std::shared_ptr<BasicUniformBuffer>> m_uniform_viewports;
-    std::vector<std::shared_ptr<BasicUniformBuffer>> m_uniform_models;
     std::vector<VkCommandBuffer> m_commandbuffers;
     uint32_t m_current_frame{0};
 
@@ -127,25 +118,24 @@ public:
 
     ~Builder() = default;
     
+    //TODO: Rasterizer specifically needs lots of control in the builder
     Builder& with_frames_in_flight(const uint32_t frames);
     Builder& with_use_alpha_blending(const bool use);
-
+    //TODO This is considered disabled as i do not yet know how to scale up
+    // the resulting image rendered in lower resolution to the window size.
+    Builder& with_render_size(const uint32_t width,
+                              const uint32_t height);
     [[nodiscard]]
     RenderPipeline produce();
     
 private:
-    // TODO: this is not possible at the moment
-    Builder& with_render_size(const uint32_t width,
-                              const uint32_t height);
-
     uint32_t m_max_frames_in_flight{2};
 
     Device* m_device{nullptr};
     Renderer* m_renderer{nullptr};
     ShaderBytecode m_vertex_bytecode;
     ShaderBytecode m_fragment_bytecode;
-    uint32_t m_render_width{0};
-    uint32_t m_render_height{0};
+    std::optional<VkExtent2D> m_render_size = std::nullopt;
     bool m_use_alpha_blending{false};
 };
    

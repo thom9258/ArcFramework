@@ -34,9 +34,21 @@ public:
     
 class Texture : IsNotLvalueCopyable
 {
-    static std::unique_ptr<Texture> create(const VkPhysicalDevice& physical_device,
-                                           const VkDevice& logical_device,
-                                           const Image* image);
+public:
+    Texture(const VkImage texture,
+            const VkDeviceMemory texture_memory);
+    
+    void destroy(const VkDevice logical_device);
+    ~Texture();
+
+    static std::unique_ptr<Texture> create_staging(const VkPhysicalDevice& physical_device,
+                                                   const VkDevice& logical_device,
+                                                   const VkCommandPool& command_pool,
+                                                   const VkQueue& graphics_queue,
+                                                   const Image* image);
+private:
+    VkImage m_texture;
+    VkDeviceMemory m_texture_memory;
 };
 
 } 

@@ -32,7 +32,7 @@ VkDescriptorSetLayout create_uniform_descriptorset_layout(
     
         VkDescriptorSetLayoutCreateInfo layout_info{};
     layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layout_info.bindingCount = 1;
+    layout_info.bindingCount = count;
     layout_info.pBindings = &binding;
     
     VkDescriptorSetLayout layout{};
@@ -84,7 +84,7 @@ void create_uniform_buffer(const VkPhysicalDevice& physical_device,
                 &out_mapped);
 }
     
-UniformBuffer::UniformBuffer(VkBuffer buffer,
+BasicUniformBuffer::BasicUniformBuffer(VkBuffer buffer,
                              VkDeviceMemory memory,
                              void* mapping,
                              VkDeviceSize size
@@ -96,9 +96,10 @@ UniformBuffer::UniformBuffer(VkBuffer buffer,
 {
 }
     
-std::unique_ptr<UniformBuffer> UniformBuffer::create(const VkPhysicalDevice& physical_device,
-                                                     const VkDevice& logical_device,
-                                                     const VkDeviceSize memsize)
+std::unique_ptr<BasicUniformBuffer> BasicUniformBuffer::create(
+    const VkPhysicalDevice& physical_device,
+    const VkDevice& logical_device,
+    const VkDeviceSize memsize)
 {
     try {
         VkBuffer buffer;
@@ -111,20 +112,25 @@ std::unique_ptr<UniformBuffer> UniformBuffer::create(const VkPhysicalDevice& phy
                               memory,
                               mapping);
 
-        return std::make_unique<UniformBuffer>(buffer, memory, mapping, memsize);
+        return std::make_unique<BasicUniformBuffer>(buffer, memory, mapping, memsize);
     }
     catch (const std::runtime_error&) {
     }
     return nullptr;
 }
     
-void UniformBuffer::destroy(const VkDevice& logical_device)
+void BasicUniformBuffer::destroy(const VkDevice& logical_device)
 {
     vkDestroyBuffer(logical_device, m_buffer, nullptr);
     vkFreeMemory(logical_device, m_memory, nullptr);
 }
     
-VkDescriptorBufferInfo UniformBuffer::descriptor_buffer_info()
+void BasicUniformBuffer::set_uniform(void* src)
+{
+    memcpy(m_mapping, src, m_size);
+}
+    
+VkDescriptorBufferInfo BasicUniformBuffer::descriptor_buffer_info()
 {
         VkDescriptorBufferInfo info{};
         info.buffer = m_buffer;
@@ -132,6 +138,5 @@ VkDescriptorBufferInfo UniformBuffer::descriptor_buffer_info()
         info.range = m_size;
         return info;
 }
-
 
 }

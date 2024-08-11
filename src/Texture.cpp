@@ -49,12 +49,69 @@ int Image::width() const { return m_width; }
 int Image::height() const { return m_height; }
 int Image::channels() const { return m_channels; }
 unsigned char* Image::pixels() const { return m_pixels; }
+    
+
+VkCommandBuffer begin_single_time_commands(const VkDevice& logical_device,
+                                           const VkCommandPool& command_pool)
+{
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandPool = command_pool;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer;
+    vkAllocateCommandBuffers(logical_device, &allocInfo, &commandBuffer);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+    return commandBuffer;
+}
+
+void end_single_time_commands(VkCommandBuffer commandBuffer,
+                              VkQueue graphics_queue,
+                              const VkDevice& logical_device,
+                              const VkCommandPool& command_pool) 
+{
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    vkQueueSubmit(graphics_queue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(graphics_queue);
+
+    vkFreeCommandBuffers(logical_device, command_pool, 1, &commandBuffer);
+}
+    
 
 
-std::unique_ptr<Texture> Texture::create(const VkPhysicalDevice& physical_device,
-                                         const VkDevice& logical_device,
-                                         const Image* image
-                                         )
+Texture::Texture(const VkImage texture,
+                 const VkDeviceMemory texture_memory)
+    : m_texture(texture)
+    , m_texture_memory(texture_memory)
+{
+}
+
+void Texture::destroy(const VkDevice logical_device)
+{
+    vkDestroyImage(logical_device, m_texture, nullptr);
+    vkFreeMemory(logical_device, m_texture_memory, nullptr);
+}
+
+Texture::~Texture() = default;
+
+std::unique_ptr<Texture> Texture::create_staging(const VkPhysicalDevice& physical_device,
+                                                 const VkDevice& logical_device,
+                                                 const VkCommandPool& command_pool,
+                                                 const VkQueue& graphics_queue,
+                                                 const Image* image)
 {
     if (!image) return nullptr;
 
@@ -98,11 +155,10 @@ std::unique_ptr<Texture> Texture::create(const VkPhysicalDevice& physical_device
     image_info.flags = 0; // Optional
     
     VkImage texture;
-    const auto status = vkCreateImage(logical_device, &image_info, nullptr, &texture);
+    auto status = vkCreateImage(logical_device, &image_info, nullptr, &texture);
     if (status != VK_SUCCESS)
         throw std::runtime_error("failed to create image!");
     
-    VkDeviceMemory texture_memory;
     VkMemoryRequirements mem_requirements;
     vkGetImageMemoryRequirements(logical_device, texture, &mem_requirements);
 
@@ -112,15 +168,32 @@ std::unique_ptr<Texture> Texture::create(const VkPhysicalDevice& physical_device
     
 
     //https://vulkan-tutorial.com/Texture_mapping/Images
-    alloc_info.memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits,
+    const auto memory_properties = get_physical_device_memory_properties(physical_device);
+
+    alloc_info.memoryTypeIndex = find_memory_type(memory_properties,
+                                                  mem_requirements.memoryTypeBits,
                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    if (vkAllocateMemory(device, &allocInfo, nullptr, &textureImageMemory) != VK_SUCCESS) {
+    VkDeviceMemory texture_memory;
+    status = vkAllocateMemory(logical_device, &alloc_info, nullptr, &texture_memory);
+    if (status != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate image memory!");
     }
 
-    vkBindImageMemory(device, textureImage, textureImageMemory, 0);   
-
+    vkBindImageMemory(logical_device, texture, texture_memory, 0);   
+    transition_image_layout(logical_device,
+                            command_pool,
+                            graphics_queue,
+                            texture,
+                            VK_FORMAT_R8G8B8A8_SRGB,
+                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    
+    
+    vkDestroyBuffer(logical_device, staging_buffer, nullptr);
+    vkFreeMemory(logical_device, staging_buffer_memory, nullptr);
+    
+    return std::make_unique<Texture>(texture, texture_memory);
 }
     
 }

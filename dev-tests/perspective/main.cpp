@@ -1,4 +1,11 @@
-#include <arc/Context.hpp>
+#include <arc/Device.hpp>
+#include <arc/Renderer.hpp>
+#include <arc/RenderPipeline.hpp>
+#include <arc/VertexBuffer.hpp>
+#include <arc/IndexBuffer.hpp>
+
+#include <iostream>
+#include <chrono>
 
 #define WIDTH 1200
 #define HEIGHT 900
@@ -7,14 +14,77 @@ int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
     
-    const auto vertex_bytecode = arc::read_shader_bytecode("../perspective.vert.spv");
-    const auto fragment_bytecode = arc::read_shader_bytecode("../perspective.frag.spv");
+    auto device = ArcGraphics::Device::Builder()
+        .add_khronos_validation_layer()
+        .produce();
+    
+    std::cout << "device\n"
+              << "  instance id: " << device.instance() << "\n"
+              << "  physical device id: " << device.physical_device() << "\n"
+              << "  logical device id: " << device.logical_device() << std::endl;
+    
+    auto renderer = ArcGraphics::Renderer::Builder(&device)
+        .with_wanted_window_size(1200, 800)
+        .with_window_name("Triangle")
+        .with_window_flags(SDL_WINDOW_BORDERLESS | SDL_WINDOW_SHOWN)
+        .produce();
 
-    auto context = arc::GraphicsContext(WIDTH,
-                                        HEIGHT,
-                                        vertex_bytecode,
-                                        fragment_bytecode
-                                        );
+    const auto vert = ArcGraphics::read_shader_bytecode("../perspective.vert.spv");
+    const auto frag = ArcGraphics::read_shader_bytecode("../perspective.frag.spv");
+
+    auto render_pipeline =
+        ArcGraphics::RenderPipeline::Builder(&device, &renderer, vert, frag)
+        .with_frames_in_flight(3)
+        //.with_render_size(500, 300)
+        .produce();
+    
+
+    std::cout << "===========================================\n"
+              << " Produced the entire pipeline\n"
+              << "===========================================\n"
+              << std::endl;
+
+    const ArcGraphics::VertexBuffer::vector_type vertices = {
+        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+    };
+    const ArcGraphics::IndexBuffer::vector_type indices = {
+        0, 1, 2, 2, 3, 0
+    };
+
+    auto vertex_buffer =
+        ArcGraphics::VertexBuffer::create_staging(device.physical_device(),
+                                                  device.logical_device(),
+                                                  render_pipeline.command_pool(),
+                                                  renderer.graphics_queue(),
+                                                  vertices);
+    
+    if (vertex_buffer == nullptr)
+        throw std::runtime_error("Failed to create vertex buffer!");
+    
+    auto index_buffer = ArcGraphics::IndexBuffer::create(device.physical_device(),
+                                                         device.logical_device(),
+                                                         indices);
+    
+    if (index_buffer == nullptr)
+        throw std::runtime_error("Failed to create index buffer!");
+    
+
+    auto view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f),
+                                glm::vec3(0.0f, 0.0f, 0.0f),
+                                glm::vec3(0.0f, 0.0f, 1.0f));
+
+    const auto rendersize = render_pipeline.render_size();
+
+    auto proj = glm::perspective(glm::radians(45.0f),
+                                     rendersize.width / (float)rendersize.height,
+                                     0.1f,
+                                     10.0f);
+    proj[1][1] *= -1;
+
+    auto startTime = std::chrono::high_resolution_clock::now();
 
     bool exit = false;
     SDL_Event event;
@@ -42,7 +112,7 @@ int main(int argc, char** argv) {
                 switch (wev.event) {
                 case SDL_WINDOWEVENT_RESIZED:
                 case SDL_WINDOWEVENT_SIZE_CHANGED:
-                    context.window_resized_event();
+                    //context.window_resized_event();
                     break;
                 case SDL_WINDOWEVENT_CLOSE:
                     exit = true;
@@ -55,6 +125,24 @@ int main(int argc, char** argv) {
         /* =======================================================
          * Draw Frame
          */
-        context.draw_frame();
+        render_pipeline.start_frame(view, proj);
+        
+        ArcGraphics::DrawableGeometry triangle{};
+        triangle.vertices = vertex_buffer.get();
+        triangle.indices = index_buffer.get();
+        
+
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+        triangle.model = glm::rotate(glm::mat4(1.0f),
+                                     time * glm::radians(90.0f),
+                                     glm::vec3(0.0f, 0.0f, 1.0f));
+ 
+        render_pipeline.add_geometry(triangle);
+        render_pipeline.draw_frame();
     }
+    
+    render_pipeline.destroy();
+    renderer.destroy();
+    device.destroy();
 }

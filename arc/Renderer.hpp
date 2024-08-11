@@ -18,6 +18,8 @@ public:
     Renderer(Device* device,
              SDL_Window* window,
              const VkSurfaceKHR window_surface,
+             const uint32_t window_width,
+             const uint32_t window_height,
              const VkSwapchainKHR swapchain,
              const std::vector<VkImageView> swapchain_image_views,
              const VkSurfaceFormatKHR surface_format,
@@ -37,10 +39,14 @@ public:
     const VkSurfaceFormatKHR& surface_format() const;
     const VkQueue& graphics_queue() const;
 
+    VkExtent2D window_size() const;
+
 private:
     Device* m_device{nullptr};
     SDL_Window* m_window{nullptr};
     VkSurfaceKHR m_window_surface;
+    uint32_t m_window_width;
+    uint32_t m_window_height;
     VkSwapchainKHR m_swapchain;
     std::vector<VkImageView> m_swapchain_image_views;
     VkSurfaceFormatKHR m_surface_format;

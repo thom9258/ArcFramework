@@ -245,7 +245,6 @@ DeviceRenderingCapabilities get_rendering_capabilities(const VkPhysicalDevice& d
                                               &surface_capabilities);
 
     DeviceRenderingCapabilities capabilities{};
-    capabilities.window_extent = surface_capabilities.currentExtent;
     capabilities.min_image_count = surface_capabilities.minImageCount;
     capabilities.max_image_count = surface_capabilities.maxImageCount;
     capabilities.max_image_array_layers = surface_capabilities.maxImageArrayLayers;
