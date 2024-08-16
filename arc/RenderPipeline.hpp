@@ -62,32 +62,28 @@ public:
     RenderPipeline(Device* device,    
                    Renderer* renderer,
                    const VkRenderPass render_pass,
-                   const VkDescriptorPool descriptor_pool,
-                   const VkDescriptorSetLayout descriptor_layout,
-                   const std::vector<VkDescriptorSet> descriptor_sets,
+                   //const VkDescriptorPool descriptor_pool,
+                   //const VkDescriptorSetLayout descriptor_layout,
+                   //const std::vector<VkDescriptorSet> descriptor_sets,
                    const VkPipelineLayout graphics_pipeline_layout,
                    const VkPipeline graphics_pipeline,
                    const VkExtent2D render_size,
                    const std::vector<VkFramebuffer> framebuffers,
                    const std::vector<RenderFrameLocks> framelocks,
-                   const std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_viewport,
                    const std::vector<VkCommandBuffer> commandbuffers,
-                   const VkCommandPool command_pool,
-                   
-                   Texture* TMP_texture
+                   const VkCommandPool command_pool
                    );
     
     VkExtent2D render_size() const;
+    uint32_t max_frames_in_flight() const;
+    uint32_t current_flight_frame() const;
+    const VkPipelineLayout& layout() const;
+
     std::optional<uint32_t> wait_for_next_frame();
+  
+    VkCommandBuffer begin_command_buffer(uint32_t image_index);
 
-    void start_frame(const glm::mat4 view, const glm::mat4 projection);
-    void add_geometry(const DrawableGeometry geometry);
-    void draw_frame();
-
-    // TODO: this ugly thing needs to be moved
-    void record_command_buffer(const std::vector<DrawableGeometry> geometries,
-                               VkCommandBuffer command_buffer,
-                               uint32_t image_index);
+    void end_command_buffer(VkCommandBuffer command_buffer, uint32_t image_index);
     
     ~RenderPipeline() = default;
     void destroy();
@@ -95,30 +91,19 @@ public:
     const VkCommandPool& command_pool() const;
 
 private:
-    glm::mat4 m_view;
-    glm::mat4 m_projection;
-    std::vector<DrawableGeometry> m_geometries;
-
     Device* m_device{nullptr};
     Renderer* m_renderer{nullptr};
     VkRenderPass m_render_pass;
-    VkDescriptorPool m_descriptor_pool;
-    VkDescriptorSetLayout m_descriptor_layout;
-    std::vector<VkDescriptorSet> m_descriptor_sets;
     VkPipelineLayout m_graphics_pipeline_layout;
     VkPipeline m_graphics_pipeline;
     VkExtent2D m_render_size;
     std::vector<VkFramebuffer> m_swap_chain_framebuffers;
     std::vector<RenderFrameLocks> m_framelocks;
-    std::vector<std::shared_ptr<BasicUniformBuffer>> m_uniform_viewports;
     std::vector<VkCommandBuffer> m_commandbuffers;
-    uint32_t m_current_frame{0};
+    uint32_t m_current_flight_frame{0};
 
     bool m_swap_chain_framebuffer_resized{false};
     VkCommandPool m_command_pool;
-    
-
-    Texture* m_TMP_texture;
 };
     
 class RenderPipeline::Builder : protected IsNotLvalueCopyable
@@ -127,7 +112,9 @@ public:
     Builder(Device* device,
             Renderer* renderer,
             const ShaderBytecode vertex_bytecode,
-            const ShaderBytecode fragment_bytecode);
+            const ShaderBytecode fragment_bytecode,
+            const VkDescriptorSetLayout descriptorset_layout
+            );
 
     ~Builder() = default;
     
@@ -142,12 +129,13 @@ public:
     RenderPipeline produce();
     
 private:
-    uint32_t m_max_frames_in_flight{2};
-
     Device* m_device{nullptr};
     Renderer* m_renderer{nullptr};
     ShaderBytecode m_vertex_bytecode;
     ShaderBytecode m_fragment_bytecode;
+    VkDescriptorSetLayout m_descriptorset_layout;
+
+    uint32_t m_max_frames_in_flight{2};
     std::optional<VkExtent2D> m_render_size = std::nullopt;
     bool m_use_alpha_blending{false};
 };

@@ -95,13 +95,71 @@ const VkCommandPool& RenderPipeline::command_pool() const
     return m_command_pool;
 }
     
-void RenderPipeline::record_command_buffer(const std::vector<DrawableGeometry> geometries,
-                                           VkCommandBuffer command_buffer,
-                                           uint32_t image_index) 
+VkExtent2D RenderPipeline::render_size() const
+{
+    return m_render_size;
+}
+
+
+uint32_t RenderPipeline::max_frames_in_flight() const
+{
+    return static_cast<uint32_t>(m_framelocks.size());
+}
+
+uint32_t RenderPipeline::current_flight_frame() const
+{
+    return m_current_flight_frame;
+}
+
+const VkPipelineLayout& RenderPipeline::layout() const
+{
+    return m_graphics_pipeline_layout;
+}
+
+std::optional<uint32_t> RenderPipeline::wait_for_next_frame()
+{
+    vkWaitForFences(m_device->logical_device(),
+                    1,
+                    &m_framelocks[m_current_flight_frame].fence_in_flight,
+                    VK_TRUE,
+                    UINT64_MAX);
+    
+    if (m_swap_chain_framebuffer_resized) {
+    //    recreate_swap_chain();
+        return std::nullopt; //TODO call resizing
+    }
+
+    uint32_t image_index;
+    auto status = vkAcquireNextImageKHR(m_device->logical_device(),
+                                        m_renderer->swapchain(),
+                                        UINT64_MAX,
+                                        m_framelocks[m_current_flight_frame].semaphore_image_available,
+                                        VK_NULL_HANDLE,
+                                        &image_index);
+
+    if (status == VK_ERROR_OUT_OF_DATE_KHR || m_swap_chain_framebuffer_resized) {
+        //recreate_swap_chain();
+        return std::nullopt; //TODO call resizing
+    } 
+    else if (status != VK_SUCCESS && status != VK_SUBOPTIMAL_KHR)
+        throw std::runtime_error("Failed to acquire swap chain image!");
+    
+    // Reset fences now we could get next image to draw on
+    vkResetFences(m_device->logical_device(),
+                  1,
+                  &m_framelocks[m_current_flight_frame].fence_in_flight);
+
+    vkResetCommandBuffer(m_commandbuffers[m_current_flight_frame], 0);
+    return image_index;
+}
+
+VkCommandBuffer RenderPipeline::begin_command_buffer(uint32_t image_index)
 {
     /* ===================================================================
      * Begin Command Buffer
      */
+    const auto command_buffer = m_commandbuffers[m_current_flight_frame];
+
     VkCommandBufferBeginInfo begin_info{};
     begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     begin_info.flags = 0; // Optional
@@ -159,155 +217,40 @@ void RenderPipeline::record_command_buffer(const std::vector<DrawableGeometry> g
     scissor.offset = {0, 0};
     scissor.extent = m_render_size;
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
-    
+ 
+    return command_buffer;
+}
 
-    /* ===================================================================
-     * Draw
-     */
-     // TODO: note we load data to uniform buffers using this UniformBufferObject thing..
-    for (auto& geometry: geometries) {
-        if (!geometry.vertices)
-            throw std::runtime_error("vertex buffer ptr was nullptr!");
-        if (!geometry.indices)
-            throw std::runtime_error("index buffer ptr was nullptr!");
 
-        /* Bind Viewport
-         */
-        ViewPort viewport{};
-        viewport.view = m_view;
-        viewport.proj = m_projection;
-        viewport.model = geometry.model;
-        m_uniform_viewports[m_current_frame]->set_uniform(&viewport);
-
-        // https://community.khronos.org/t/how-to-pass-two-uniform-bbuffers-in-shader/106753/2
-        //TODO: Note here that we need to pull descriptor set from the provided geometry object
-        // as this would allow for multiple descriptor sets containing different textures
-        vkCmdBindDescriptorSets(command_buffer,
-                                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                m_graphics_pipeline_layout,
-                                0,
-                                1,
-                                &m_descriptor_sets[m_current_frame],
-                                0,
-                                nullptr);
-
-        /* Bind Vertices and Indices
-         */
-        //TODO: It seems that binding can support multiple vertex buffers
-        VkBuffer vertex_buffers[] = {geometry.vertices->get_buffer()};
-        VkDeviceSize offsets[] = {0};
-        vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
-        vkCmdBindIndexBuffer(command_buffer,
-                             geometry.indices->get_buffer(),
-                             0,
-                             VK_INDEX_TYPE_UINT32);
-        
-        const uint32_t instanceCount = 1;
-        const uint32_t firstIndex = 0;
-        const int32_t  vertexOffset = 0;
-        const uint32_t firstInstance = 0;
-        vkCmdDrawIndexed(command_buffer,
-                         geometry.indices->get_count(),
-                         instanceCount,
-                         firstIndex,
-                         vertexOffset,
-                         firstInstance);
-    }
-   
+void RenderPipeline::end_command_buffer(VkCommandBuffer command_buffer, uint32_t image_index)
+{
     vkCmdEndRenderPass(command_buffer);
-    status = vkEndCommandBuffer(command_buffer);
+    auto status = vkEndCommandBuffer(command_buffer);
     if (status != VK_SUCCESS)
         throw std::runtime_error("Failed to record command buffer!");
-}
 
-VkExtent2D RenderPipeline::render_size() const
-{
-    return m_render_size;
-}
-
-void RenderPipeline::start_frame(const glm::mat4 view, const glm::mat4 projection)
-{
-    m_geometries.clear();
-    m_view = view;
-    m_projection = projection;
-}
-
-void RenderPipeline::add_geometry(const DrawableGeometry geometry)
-{
-    m_geometries.push_back(geometry);
-}
-
-
-
-std::optional<uint32_t> RenderPipeline::wait_for_next_frame()
-{
-    vkWaitForFences(m_device->logical_device(),
-                    1,
-                    &m_framelocks[m_current_frame].fence_in_flight,
-                    VK_TRUE,
-                    UINT64_MAX);
-    
-    if (m_swap_chain_framebuffer_resized) {
-    //    recreate_swap_chain();
-        return std::nullopt; //TODO call resizing
-    }
-
-    uint32_t image_index;
-    auto status = vkAcquireNextImageKHR(m_device->logical_device(),
-                                        m_renderer->swapchain(),
-                                        UINT64_MAX,
-                                        m_framelocks[m_current_frame].semaphore_image_available,
-                                        VK_NULL_HANDLE,
-                                        &image_index);
-
-    if (status == VK_ERROR_OUT_OF_DATE_KHR || m_swap_chain_framebuffer_resized) {
-        //recreate_swap_chain();
-        return std::nullopt; //TODO call resizing
-    } 
-    else if (status != VK_SUCCESS && status != VK_SUBOPTIMAL_KHR)
-        throw std::runtime_error("Failed to acquire swap chain image!");
-    
-    // Reset fences now we could get next image to draw on
-    vkResetFences(m_device->logical_device(),
-                  1,
-                  &m_framelocks[m_current_frame].fence_in_flight);
-
-    vkResetCommandBuffer(m_commandbuffers[m_current_frame], 0);
-    return image_index;
-}
-
-void RenderPipeline::draw_frame()
-{
-    auto image_index = wait_for_next_frame();
-    if (!image_index)
-        return;
-
-    record_command_buffer(m_geometries,
-                          m_commandbuffers[m_current_frame],
-                          *image_index);
-   
     VkSubmitInfo submit_info{};
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
     std::vector<VkSemaphore> waitSemaphores =
-        {m_framelocks[m_current_frame].semaphore_image_available};
+        {m_framelocks[m_current_flight_frame].semaphore_image_available};
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
     submit_info.waitSemaphoreCount = waitSemaphores.size();
     submit_info.pWaitSemaphores = waitSemaphores.data();
     submit_info.pWaitDstStageMask = waitStages;
     submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &m_commandbuffers[m_current_frame];
+    submit_info.pCommandBuffers = &m_commandbuffers[m_current_flight_frame];
     
     std::vector<VkSemaphore> signalSemaphores =
-        {m_framelocks[m_current_frame].semaphore_rendering_finished};
+        {m_framelocks[m_current_flight_frame].semaphore_rendering_finished};
     submit_info.signalSemaphoreCount = signalSemaphores.size();
     submit_info.pSignalSemaphores = signalSemaphores.data();
 
-    auto status = vkQueueSubmit(m_renderer->graphics_queue(),
+    status = vkQueueSubmit(m_renderer->graphics_queue(),
                            1,
                            &submit_info,
-                           m_framelocks[m_current_frame].fence_in_flight); 
+                           m_framelocks[m_current_flight_frame].fence_in_flight); 
     if (status != VK_SUCCESS)
         throw std::runtime_error("Failed to submit draw command buffer!");
     
@@ -321,7 +264,7 @@ void RenderPipeline::draw_frame()
     std::vector<VkSwapchainKHR> swapChains = {m_renderer->swapchain()};
     present_info.swapchainCount = swapChains.size();
     present_info.pSwapchains = swapChains.data();
-    present_info.pImageIndices = &*image_index;
+    present_info.pImageIndices = &image_index;
     present_info.pResults = nullptr; // Optional
 
     status = vkQueuePresentKHR(m_renderer->graphics_queue(), &present_info);
@@ -333,42 +276,29 @@ void RenderPipeline::draw_frame()
     else if (status != VK_SUCCESS && status != VK_SUBOPTIMAL_KHR)
         throw std::runtime_error("Failed to acquire swap chain image!");
 
-    m_current_frame = (m_current_frame + 1) % m_framelocks.size();
+    m_current_flight_frame = (m_current_flight_frame + 1) % m_framelocks.size();
 }
-  
+ 
 RenderPipeline::RenderPipeline(Device* device,
-    Renderer* renderer,
-    const VkRenderPass render_pass,
-    const VkDescriptorPool descriptor_pool,
-    const VkDescriptorSetLayout descriptor_layout,
-    const std::vector<VkDescriptorSet> descriptor_sets,
-    const VkPipelineLayout graphics_pipeline_layout,
-    const VkPipeline graphics_pipeline,
-    const VkExtent2D render_size,
-    const std::vector<VkFramebuffer> framebuffers,
-    const std::vector<RenderFrameLocks> framelocks,
-    const std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_viewport,
-    const std::vector<VkCommandBuffer> commandbuffers,
-    const VkCommandPool command_pool,
-                   
-    Texture* TMP_texture
-)
+                               Renderer* renderer,
+                               const VkRenderPass render_pass,
+                               const VkPipelineLayout graphics_pipeline_layout,
+                               const VkPipeline graphics_pipeline,
+                               const VkExtent2D render_size,
+                               const std::vector<VkFramebuffer> framebuffers,
+                               const std::vector<RenderFrameLocks> framelocks,
+                               const std::vector<VkCommandBuffer> commandbuffers,
+                               const VkCommandPool command_pool)
     : m_device(device)
     , m_renderer(renderer)
     , m_render_pass(render_pass)
-    , m_descriptor_pool(descriptor_pool)
-    , m_descriptor_layout(descriptor_layout)
-    , m_descriptor_sets(descriptor_sets)
     , m_graphics_pipeline_layout(graphics_pipeline_layout)
     , m_graphics_pipeline(graphics_pipeline)
     , m_render_size(render_size)
     , m_swap_chain_framebuffers(framebuffers)
     , m_framelocks(framelocks)
-    , m_uniform_viewports(uniform_viewport)
     , m_commandbuffers(commandbuffers)
     , m_command_pool(command_pool)
-
-    , m_TMP_texture(TMP_texture)
 {
     if (!m_device)
         throw std::runtime_error("RenderPipeline() device was nullptr!");
@@ -385,10 +315,6 @@ void RenderPipeline::destroy()
     for (auto& framebuffer: m_swap_chain_framebuffers)
         vkDestroyFramebuffer(logical_device, framebuffer, nullptr);
 
-    vkDestroyDescriptorPool(logical_device, m_descriptor_pool, nullptr);
-
-    vkDestroyDescriptorSetLayout(logical_device, m_descriptor_layout, nullptr);
-   
     for (size_t i = 0; i < m_framelocks.size(); i++) {
         vkDestroySemaphore(logical_device,
                            m_framelocks[i].semaphore_image_available,
@@ -410,11 +336,13 @@ void RenderPipeline::destroy()
 RenderPipeline::Builder::Builder(Device* device,
                                  Renderer* renderer,
                                  const ShaderBytecode vertex_bytecode,
-                                 const ShaderBytecode fragment_bytecode)
+                                 const ShaderBytecode fragment_bytecode,
+                                 const VkDescriptorSetLayout descriptorset_layout)
     : m_device(device)
     , m_renderer(renderer)
     , m_vertex_bytecode(vertex_bytecode)
     , m_fragment_bytecode(fragment_bytecode)
+    , m_descriptorset_layout(descriptorset_layout)
 {
     if (!m_device)
         throw std::runtime_error("RenderPipeline::Builder() device was nullptr!");
@@ -444,9 +372,7 @@ RenderPipeline::Builder& RenderPipeline::Builder::with_use_alpha_blending(const 
     return *this;
 }
 
-RenderPipeline RenderPipeline::Builder::produce(
-                                                Texture* TMP_texture
-)
+RenderPipeline RenderPipeline::Builder::produce()
 {
     std::cout << "==================================================\n"
               << " Producing RenderPipeline\n"
@@ -540,173 +466,22 @@ RenderPipeline RenderPipeline::Builder::produce(
     rasterizer.depthBiasConstantFactor = 0.0f; // Optional
     rasterizer.depthBiasClamp = 0.0f; // Optional
     rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
-   
-    /* ===================================================================
-     * Create Pipeline Layout
-     */
-    
-    // NOTE: here that we create multiple bindings, and use different stages aswell.
-    // TODO: this needs to come in through the pipeline builder...
-    VkDescriptorSetLayoutBinding viewport_layout_binding{};
-    viewport_layout_binding.binding = 0;
-    viewport_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    viewport_layout_binding.descriptorCount = 1;
-    viewport_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    VkDescriptorSetLayoutBinding texture_sampler_layout_binding{};
-    texture_sampler_layout_binding.binding = 1;
-    texture_sampler_layout_binding.descriptorCount = 1;
-    texture_sampler_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    texture_sampler_layout_binding.pImmutableSamplers = nullptr;
-    texture_sampler_layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    const std::vector<VkDescriptorSetLayoutBinding> bindings = 
-        {viewport_layout_binding, texture_sampler_layout_binding};
-    
-    //TODO BUG: I think this is the place where i cannot define multiple
-    //          Uniform buffers?
-    // I think the broblem is i create a descriptorsetlayout here that only has one
-    // binding in it, i need to specify multiple, meaning this needs to be fixed..
-    // THIS-> https://vulkan-tutorial.com/Texture_mapping/Combined_image_sampler
-    // https://gist.github.com/SaschaWillems/428d15ed4b5d71ead462bc63adffa93a
-    //VkDescriptorSetLayout descriptor_layout = 
-    //    create_uniform_vertex_descriptorset_layout(m_device->logical_device(), 0, 1);
-    
-    
-    VkDescriptorSetLayoutCreateInfo descriptor_set_layout_info{};
-    descriptor_set_layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptor_set_layout_info.bindingCount = static_cast<uint32_t>(bindings.size());
-    descriptor_set_layout_info.pBindings = bindings.data();
-
-    VkDescriptorSetLayout descriptor_set_layout{};
-    auto status = vkCreateDescriptorSetLayout(m_device->logical_device(),
-                                              &descriptor_set_layout_info,
-                                              nullptr,
-                                              &descriptor_set_layout);
-
-    if (status != VK_SUCCESS)
-        throw std::runtime_error("failed to create descriptor set layout!");
-
     
     VkPipelineLayoutCreateInfo pipeline_layout_info{};
     pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipeline_layout_info.setLayoutCount = 1;
-    pipeline_layout_info.pSetLayouts = &descriptor_set_layout;
+    pipeline_layout_info.pSetLayouts = &m_descriptorset_layout;
     pipeline_layout_info.pushConstantRangeCount = 0; // Optional
     pipeline_layout_info.pPushConstantRanges = nullptr; // Optional
     
     VkPipelineLayout graphics_pipeline_layout;
-    status = vkCreatePipelineLayout(m_device->logical_device(),
-                                    &pipeline_layout_info,
-                                    nullptr,
-                                    &graphics_pipeline_layout);
+    auto status = vkCreatePipelineLayout(m_device->logical_device(),
+                                         &pipeline_layout_info,
+                                         nullptr,
+                                         &graphics_pipeline_layout);
     if (status != VK_SUCCESS)
         throw std::runtime_error("failed to create pipeline layout!");
     
-    /* ===================================================================
-     * Create Descriptor Pool and Sets
-     */
-    //auto descriptor_pool = 
-    //    create_uniform_descriptor_pool(m_device->logical_device(),
-    //                                   m_max_frames_in_flight);
-    
-    // Generate pool sizes based on the bindings vector
-    std::vector<VkDescriptorPoolSize> descriptor_pool_sizes{};
-    for (const auto& binding: bindings) {
-        VkDescriptorPoolSize size{};
-        size.type = binding.descriptorType;
-        size.descriptorCount = m_max_frames_in_flight;
-        descriptor_pool_sizes.push_back(size);
-    }
-
-    VkDescriptorPoolCreateInfo descriptor_pool_info{};
-    descriptor_pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptor_pool_info.poolSizeCount = static_cast<uint32_t>(descriptor_pool_sizes.size());
-    descriptor_pool_info.pPoolSizes = descriptor_pool_sizes.data();
-    descriptor_pool_info.maxSets = m_max_frames_in_flight;
-
-    VkDescriptorPool descriptor_pool{};
-    status = vkCreateDescriptorPool(m_device->logical_device(),
-                                    &descriptor_pool_info,
-                                    nullptr,
-                                    &descriptor_pool);
-    if (status != VK_SUCCESS)
-        throw std::runtime_error("Failed to create descriptor pool for uniform buffer!");
-
-
-
-
-    std::vector<VkDescriptorSetLayout> layouts(m_max_frames_in_flight,
-                                               descriptor_set_layout);
-    
-    VkDescriptorSetAllocateInfo descriptor_pool_alloc_info{};
-    descriptor_pool_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptor_pool_alloc_info.descriptorPool = descriptor_pool;
-    descriptor_pool_alloc_info.descriptorSetCount = 
-        static_cast<uint32_t>(layouts.size());
-    descriptor_pool_alloc_info.pSetLayouts = layouts.data();
-
-    std::vector<VkDescriptorSet> descriptor_sets(m_max_frames_in_flight);
-    status = vkAllocateDescriptorSets(m_device->logical_device(),
-                                      &descriptor_pool_alloc_info,
-                                      descriptor_sets.data());
-    if (status != VK_SUCCESS)
-        throw std::runtime_error("Failed to allocate descriptor sets!");
-
-    std::cout << "Allocated descriptor sets!" << std::endl;
-    
-    /* ===================================================================
-     * Create Uniform Buffers
-     */
-    //std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_viewports;
-    //for (size_t i = 0; i < m_max_frames_in_flight; i++) {
-    //    auto uniform = BasicUniformBuffer::create(m_device->physical_device(),
-    //                                              m_device->logical_device(),
-    //                                              sizeof(ViewPort));
-    //    uniform_viewports.push_back(std::shared_ptr<BasicUniformBuffer>(uniform.release()));
-    //}
-    //std::cout << "created uniform buffers" << std::endl;
-    //
-    ////TODO: I have found out that i should not create a texture image view and sampler,
-    //// per-texture, but rather one specific one per- renderpipeline!
-    //// https://vulkan-tutorial.com/Texture_mapping/Combined_image_sampler
-    //// i need to figure out how to create a sampler and view to be able to facilitate
-    //// different types of formats, and sizes?
-    //// one approach seems to be to allocate view/sampler of some max width height, and
-    //// in the shader accept texture size and to transformation from there,
-    //std::vector<VkDescriptorImageInfo> uniform_images;
-    //for (size_t i = 0; i < m_max_frames_in_flight; i++) {
-    //    VkDescriptorImageInfo image_info = TMP_texture->image_infos()[i];
-    //    uniform_images.push_back(image_info);
-    //}
-    //std::cout << "created uniform images" << std::endl;
-    //
-    //for (size_t i = 0; i < m_max_frames_in_flight; i++) {
-    //    // Setup Descriptor buffer for ViewPort
-    //    VkDescriptorBufferInfo buffer_info =
-    //        uniform_viewports[i]->descriptor_buffer_info();
-    //    
-    //    VkWriteDescriptorSet descriptor_write{};
-    //    descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    //    descriptor_write.dstSet = descriptor_sets[i];
-    //    descriptor_write.dstBinding = 0;
-    //    descriptor_write.dstArrayElement = 0;
-    //    descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    //    descriptor_write.descriptorCount = 1;
-    //    descriptor_write.pBufferInfo = &buffer_info;
-    //    descriptor_write.pImageInfo = nullptr; // Optional
-    //    descriptor_write.pTexelBufferView = nullptr; // Optional
-    //
-    //    uint32_t count = 1;
-    //    vkUpdateDescriptorSets(m_device->logical_device(),
-    //                           count,
-    //                           &descriptor_write,
-    //                           0,
-    //                           nullptr);
-    //}
-    //
-    //std::cout << "Allocated uniform buffers!" << std::endl;
-
     /* ===================================================================
      * Create Render Passes
      */
@@ -926,19 +701,13 @@ RenderPipeline RenderPipeline::Builder::produce(
     return RenderPipeline(m_device,
                           m_renderer,
                           render_pass,
-                          descriptor_pool,
-                          descriptor_set_layout,
-                          descriptor_sets,
                           graphics_pipeline_layout,
                           graphics_pipeline,
                           render_size,
                           swapchain_framebuffers,
                           framelocks,
-                          uniform_viewports,
                           commandbuffers,
-                          command_pool,
-                          
-                          TMP_texture
+                          command_pool
                           );
 }
 
