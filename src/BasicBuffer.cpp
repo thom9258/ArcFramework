@@ -150,6 +150,16 @@ void transition_image_layout(const VkDevice& logical_device,
                              VkImageLayout oldLayout,
                              VkImageLayout newLayout) 
 {
+    /* TODO: I am getting an error:
+UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout(ERROR / SPEC): msgNum: 1303270965 - Validation Error: [ UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout ] Object 0: handle = 0x5a8e27c45480, type = VK_OBJECT_TYPE_COMMAND_BUFFER; Object 1: handle = 0x4295ab0000000035, type = VK_OBJECT_TYPE_IMAGE; | MessageID = 0x4dae5635 | vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] command buffer VkCommandBuffer 0x5a8e27c45480[] expects VkImage 0x4295ab0000000035[] (subresource: aspectMask 0x1 array layer 0, mip level 0) to be in layout VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL--instead, current layout is VK_IMAGE_LAYOUT_UNDEFINED.
+
+
+    The problem seems to be that the layout is somehow not handled correctly, and reset to
+    VK_IMAGE_LAYOUT_UNDEFINED
+     */
+
+
+
     const auto transition = [&] (VkCommandBuffer& command_buffer) {
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -166,13 +176,15 @@ void transition_image_layout(const VkDevice& logical_device,
         
         VkPipelineStageFlags source_stage;
         VkPipelineStageFlags destination_stage;
-        if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED 
+         && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
             barrier.srcAccessMask = 0;
             barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             
             source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             destination_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL 
+                && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
             barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
             

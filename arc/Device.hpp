@@ -12,9 +12,16 @@
 #include <optional>
 
 namespace ArcGraphics {
-    
-    
-class Device : protected IsNotLvalueCopyable
+
+/**
+ * @brief Devices & Context object.
+ * A small collection of global objects, used almost everywhere in the renderer.
+ * @todo restructure this class so that it is more explicitly called Devices,
+ * and access is then just logical() or physical().
+ * @todo VkInstance is a global instance thing, remove it and make it a singleton,
+ * this would essencially allow having multiple Devices.
+ */
+class Device : private IsNotLvalueCopyable
 {
 public:
     class Builder;
@@ -47,6 +54,16 @@ private:
     DeviceRenderingCapabilities m_capabilities;
 };
     
+/**
+ * @brief Device Builder.
+ * The builder used to create the device context.
+ * Facilitates adding different configurations such as validation layers.
+ * @see ArcGraphics::Device
+ *
+ * @todo make it so a specified physical device can be forced to be used, instead
+ * of always using internal algorithms to find the best one.
+ * @todo make it so a a custom scoring algorithm for devices can be supplied.
+ */
 class Device::Builder : protected IsNotLvalueCopyable
 {
 public:

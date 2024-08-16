@@ -349,8 +349,13 @@ uint32_t calculate_device_score(VkPhysicalDevice device,
         score += 200;
     
     const auto info = get_physical_device_properties_features(device);
+    if (!info.features.samplerAnisotropy)
+        return 0; // This is apparently a required thing, so we need it here?
+
+    // Ensure that discrete gpu's should always be picked over integrated,
     if (info.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-        score += 1000;
+        score += 5000;
+
     if (info.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
         score += 500;
 
@@ -410,6 +415,8 @@ std::optional<VkImageView> create_image_view(const VkDevice& device,
     create_info.image = image;
     create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
     create_info.format = format;
+    // Note that VK_COMPONENT_SWIZZLE_IDENTITY is specified as 0, and it is therefore
+    // not fully nessecary to set the components of ImageViewCreateInfo
     create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
     create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
     create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -578,6 +585,10 @@ VkDevice get_logical_device(const VkPhysicalDevice physical_device,
     queue_create_info.pQueuePriorities = &queue_priority;
 
     VkPhysicalDeviceFeatures device_features{};
+    // TODO: this is an optional thing but i do not know if it is strictly required
+    // for the program to work or if there is an alternative?
+    device_features.samplerAnisotropy = VK_TRUE;
+
     VkDeviceCreateInfo device_create_info{};
     device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     device_create_info.pQueueCreateInfos = &queue_create_info;

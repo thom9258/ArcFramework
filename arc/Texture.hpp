@@ -5,6 +5,7 @@
 #include <vulkan/vulkan.h>
 
 #include <string>
+#include <vector>
 #include <memory>
 
 namespace ArcGraphics {
@@ -35,20 +36,53 @@ public:
 class Texture : IsNotLvalueCopyable
 {
 public:
-    Texture(const VkImage texture,
-            const VkDeviceMemory texture_memory);
-    
+    Texture(const VkImage image,
+            const VkDeviceMemory memory,
+            const VkFormat format,
+            const std::vector<VkImageView> views,
+            const std::vector<VkSampler> samplers,
+            const std::vector<VkDescriptorImageInfo> infos
+            );
+
     void destroy(const VkDevice logical_device);
     ~Texture();
 
+    /**
+     * @brief Create texture. 
+     * @todo Creating textures requires a bunch of optional stuff, and should be
+     * fully handled through a builder instead of here.
+     */
     static std::unique_ptr<Texture> create_staging(const VkPhysicalDevice& physical_device,
                                                    const VkDevice& logical_device,
                                                    const VkCommandPool& command_pool,
                                                    const VkQueue& graphics_queue,
+                                                   const uint32_t frames_in_flight,
                                                    const Image* image);
+    
+    [[nodiscard]]
+    const VkImage& image();
+
+    [[nodiscard]]
+    VkFormat format();
+   
+    [[nodiscard]]
+    const std::vector<VkDescriptorImageInfo>& image_infos();
+
 private:
-    VkImage m_texture;
-    VkDeviceMemory m_texture_memory;
+    [[nodiscard]]
+    const std::vector<VkImageView>& views();
+
+    [[nodiscard]]
+    const std::vector<VkSampler>& samplers();
+    
+
+    VkImage m_image;
+    VkDeviceMemory m_memory;
+    VkFormat m_format;
+    // Per-Frame-in-Flight views / samplers and their combined infos
+    std::vector<VkImageView> m_views;
+    std::vector<VkSampler> m_samplers;
+    std::vector<VkDescriptorImageInfo> m_infos;
 };
 
 } 

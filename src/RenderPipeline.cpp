@@ -180,6 +180,8 @@ void RenderPipeline::record_command_buffer(const std::vector<DrawableGeometry> g
         m_uniform_viewports[m_current_frame]->set_uniform(&viewport);
 
         // https://community.khronos.org/t/how-to-pass-two-uniform-bbuffers-in-shader/106753/2
+        //TODO: Note here that we need to pull descriptor set from the provided geometry object
+        // as this would allow for multiple descriptor sets containing different textures
         vkCmdBindDescriptorSets(command_buffer,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 m_graphics_pipeline_layout,
@@ -191,6 +193,7 @@ void RenderPipeline::record_command_buffer(const std::vector<DrawableGeometry> g
 
         /* Bind Vertices and Indices
          */
+        //TODO: It seems that binding can support multiple vertex buffers
         VkBuffer vertex_buffers[] = {geometry.vertices->get_buffer()};
         VkDeviceSize offsets[] = {0};
         vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
@@ -346,7 +349,10 @@ RenderPipeline::RenderPipeline(Device* device,
     const std::vector<RenderFrameLocks> framelocks,
     const std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_viewport,
     const std::vector<VkCommandBuffer> commandbuffers,
-    const VkCommandPool command_pool)
+    const VkCommandPool command_pool,
+                   
+    Texture* TMP_texture
+)
     : m_device(device)
     , m_renderer(renderer)
     , m_render_pass(render_pass)
@@ -361,6 +367,8 @@ RenderPipeline::RenderPipeline(Device* device,
     , m_uniform_viewports(uniform_viewport)
     , m_commandbuffers(commandbuffers)
     , m_command_pool(command_pool)
+
+    , m_TMP_texture(TMP_texture)
 {
     if (!m_device)
         throw std::runtime_error("RenderPipeline() device was nullptr!");
@@ -436,7 +444,9 @@ RenderPipeline::Builder& RenderPipeline::Builder::with_use_alpha_blending(const 
     return *this;
 }
 
-RenderPipeline RenderPipeline::Builder::produce()
+RenderPipeline RenderPipeline::Builder::produce(
+                                                Texture* TMP_texture
+)
 {
     std::cout << "==================================================\n"
               << " Producing RenderPipeline\n"
@@ -534,22 +544,59 @@ RenderPipeline RenderPipeline::Builder::produce()
     /* ===================================================================
      * Create Pipeline Layout
      */
+    
+    // NOTE: here that we create multiple bindings, and use different stages aswell.
+    // TODO: this needs to come in through the pipeline builder...
+    VkDescriptorSetLayoutBinding viewport_layout_binding{};
+    viewport_layout_binding.binding = 0;
+    viewport_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    viewport_layout_binding.descriptorCount = 1;
+    viewport_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
+    VkDescriptorSetLayoutBinding texture_sampler_layout_binding{};
+    texture_sampler_layout_binding.binding = 1;
+    texture_sampler_layout_binding.descriptorCount = 1;
+    texture_sampler_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    texture_sampler_layout_binding.pImmutableSamplers = nullptr;
+    texture_sampler_layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    const std::vector<VkDescriptorSetLayoutBinding> bindings = 
+        {viewport_layout_binding, texture_sampler_layout_binding};
+    
     //TODO BUG: I think this is the place where i cannot define multiple
     //          Uniform buffers?
-    //https://gist.github.com/SaschaWillems/428d15ed4b5d71ead462bc63adffa93a
-    VkDescriptorSetLayout descriptor_layout = 
-        create_uniform_vertex_descriptorset_layout(m_device->logical_device(), 0, 1);
+    // I think the broblem is i create a descriptorsetlayout here that only has one
+    // binding in it, i need to specify multiple, meaning this needs to be fixed..
+    // THIS-> https://vulkan-tutorial.com/Texture_mapping/Combined_image_sampler
+    // https://gist.github.com/SaschaWillems/428d15ed4b5d71ead462bc63adffa93a
+    //VkDescriptorSetLayout descriptor_layout = 
+    //    create_uniform_vertex_descriptorset_layout(m_device->logical_device(), 0, 1);
+    
+    
+    VkDescriptorSetLayoutCreateInfo descriptor_set_layout_info{};
+    descriptor_set_layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptor_set_layout_info.bindingCount = static_cast<uint32_t>(bindings.size());
+    descriptor_set_layout_info.pBindings = bindings.data();
+
+    VkDescriptorSetLayout descriptor_set_layout{};
+    auto status = vkCreateDescriptorSetLayout(m_device->logical_device(),
+                                              &descriptor_set_layout_info,
+                                              nullptr,
+                                              &descriptor_set_layout);
+
+    if (status != VK_SUCCESS)
+        throw std::runtime_error("failed to create descriptor set layout!");
+
     
     VkPipelineLayoutCreateInfo pipeline_layout_info{};
     pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipeline_layout_info.setLayoutCount = 1;
-    pipeline_layout_info.pSetLayouts = &descriptor_layout;
+    pipeline_layout_info.pSetLayouts = &descriptor_set_layout;
     pipeline_layout_info.pushConstantRangeCount = 0; // Optional
     pipeline_layout_info.pPushConstantRanges = nullptr; // Optional
     
     VkPipelineLayout graphics_pipeline_layout;
-    auto status = vkCreatePipelineLayout(m_device->logical_device(),
+    status = vkCreatePipelineLayout(m_device->logical_device(),
                                     &pipeline_layout_info,
                                     nullptr,
                                     &graphics_pipeline_layout);
@@ -559,12 +606,38 @@ RenderPipeline RenderPipeline::Builder::produce()
     /* ===================================================================
      * Create Descriptor Pool and Sets
      */
-    auto descriptor_pool = 
-        create_uniform_descriptor_pool(m_device->logical_device(),
-                                       m_max_frames_in_flight);
+    //auto descriptor_pool = 
+    //    create_uniform_descriptor_pool(m_device->logical_device(),
+    //                                   m_max_frames_in_flight);
+    
+    // Generate pool sizes based on the bindings vector
+    std::vector<VkDescriptorPoolSize> descriptor_pool_sizes{};
+    for (const auto& binding: bindings) {
+        VkDescriptorPoolSize size{};
+        size.type = binding.descriptorType;
+        size.descriptorCount = m_max_frames_in_flight;
+        descriptor_pool_sizes.push_back(size);
+    }
+
+    VkDescriptorPoolCreateInfo descriptor_pool_info{};
+    descriptor_pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    descriptor_pool_info.poolSizeCount = static_cast<uint32_t>(descriptor_pool_sizes.size());
+    descriptor_pool_info.pPoolSizes = descriptor_pool_sizes.data();
+    descriptor_pool_info.maxSets = m_max_frames_in_flight;
+
+    VkDescriptorPool descriptor_pool{};
+    status = vkCreateDescriptorPool(m_device->logical_device(),
+                                    &descriptor_pool_info,
+                                    nullptr,
+                                    &descriptor_pool);
+    if (status != VK_SUCCESS)
+        throw std::runtime_error("Failed to create descriptor pool for uniform buffer!");
+
+
+
 
     std::vector<VkDescriptorSetLayout> layouts(m_max_frames_in_flight,
-                                               descriptor_layout);
+                                               descriptor_set_layout);
     
     VkDescriptorSetAllocateInfo descriptor_pool_alloc_info{};
     descriptor_pool_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -582,46 +655,57 @@ RenderPipeline RenderPipeline::Builder::produce()
 
     std::cout << "Allocated descriptor sets!" << std::endl;
     
-    
     /* ===================================================================
      * Create Uniform Buffers
      */
-    std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_viewports;
-
-    for (size_t i = 0; i < m_max_frames_in_flight; i++) {
-        auto uniform = BasicUniformBuffer::create(m_device->physical_device(),
-                                                  m_device->logical_device(),
-                                                  sizeof(ViewPort));
-        uniform_viewports.push_back(std::shared_ptr<BasicUniformBuffer>(uniform.release()));
-    }
-   
-    std::cout << "created uniform buffers" << std::endl;
-    
-    for (size_t i = 0; i < m_max_frames_in_flight; i++) {
-        // Setup Descriptor buffer for ViewPort
-        VkDescriptorBufferInfo buffer_info =
-            uniform_viewports[i]->descriptor_buffer_info();
-        
-        VkWriteDescriptorSet descriptor_write{};
-        descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_write.dstSet = descriptor_sets[i];
-        descriptor_write.dstBinding = 0;
-        descriptor_write.dstArrayElement = 0;
-        descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptor_write.descriptorCount = 1;
-        descriptor_write.pBufferInfo = &buffer_info;
-        descriptor_write.pImageInfo = nullptr; // Optional
-        descriptor_write.pTexelBufferView = nullptr; // Optional
-
-        uint32_t count = 1;
-        vkUpdateDescriptorSets(m_device->logical_device(),
-                               count,
-                               &descriptor_write,
-                               0,
-                               nullptr);
-    }
-
-    std::cout << "Allocated uniform buffers!" << std::endl;
+    //std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_viewports;
+    //for (size_t i = 0; i < m_max_frames_in_flight; i++) {
+    //    auto uniform = BasicUniformBuffer::create(m_device->physical_device(),
+    //                                              m_device->logical_device(),
+    //                                              sizeof(ViewPort));
+    //    uniform_viewports.push_back(std::shared_ptr<BasicUniformBuffer>(uniform.release()));
+    //}
+    //std::cout << "created uniform buffers" << std::endl;
+    //
+    ////TODO: I have found out that i should not create a texture image view and sampler,
+    //// per-texture, but rather one specific one per- renderpipeline!
+    //// https://vulkan-tutorial.com/Texture_mapping/Combined_image_sampler
+    //// i need to figure out how to create a sampler and view to be able to facilitate
+    //// different types of formats, and sizes?
+    //// one approach seems to be to allocate view/sampler of some max width height, and
+    //// in the shader accept texture size and to transformation from there,
+    //std::vector<VkDescriptorImageInfo> uniform_images;
+    //for (size_t i = 0; i < m_max_frames_in_flight; i++) {
+    //    VkDescriptorImageInfo image_info = TMP_texture->image_infos()[i];
+    //    uniform_images.push_back(image_info);
+    //}
+    //std::cout << "created uniform images" << std::endl;
+    //
+    //for (size_t i = 0; i < m_max_frames_in_flight; i++) {
+    //    // Setup Descriptor buffer for ViewPort
+    //    VkDescriptorBufferInfo buffer_info =
+    //        uniform_viewports[i]->descriptor_buffer_info();
+    //    
+    //    VkWriteDescriptorSet descriptor_write{};
+    //    descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    //    descriptor_write.dstSet = descriptor_sets[i];
+    //    descriptor_write.dstBinding = 0;
+    //    descriptor_write.dstArrayElement = 0;
+    //    descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    //    descriptor_write.descriptorCount = 1;
+    //    descriptor_write.pBufferInfo = &buffer_info;
+    //    descriptor_write.pImageInfo = nullptr; // Optional
+    //    descriptor_write.pTexelBufferView = nullptr; // Optional
+    //
+    //    uint32_t count = 1;
+    //    vkUpdateDescriptorSets(m_device->logical_device(),
+    //                           count,
+    //                           &descriptor_write,
+    //                           0,
+    //                           nullptr);
+    //}
+    //
+    //std::cout << "Allocated uniform buffers!" << std::endl;
 
     /* ===================================================================
      * Create Render Passes
@@ -843,7 +927,7 @@ RenderPipeline RenderPipeline::Builder::produce()
                           m_renderer,
                           render_pass,
                           descriptor_pool,
-                          descriptor_layout,
+                          descriptor_set_layout,
                           descriptor_sets,
                           graphics_pipeline_layout,
                           graphics_pipeline,
@@ -852,7 +936,9 @@ RenderPipeline RenderPipeline::Builder::produce()
                           framelocks,
                           uniform_viewports,
                           commandbuffers,
-                          command_pool
+                          command_pool,
+                          
+                          TMP_texture
                           );
 }
 

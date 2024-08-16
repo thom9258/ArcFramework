@@ -2,6 +2,7 @@
 
 #include "Renderer.hpp"
 #include "VertexBuffer.hpp"
+#include "Texture.hpp"
 #include "IndexBuffer.hpp"
 #include "UniformBuffer.hpp"
 #include "Algorithm.hpp"
@@ -12,7 +13,10 @@
 
 namespace ArcGraphics {
     
-//TODO: temporary object to provide viewport in shaders    
+/**
+* @brief shader viewport and model matrix combined.
+* @todo temporary object to provide viewport in shaders    
+*/
 struct ViewPort {
     glm::mat4 view;
     glm::mat4 proj;
@@ -21,9 +25,15 @@ struct ViewPort {
 
 using ShaderBytecode = std::vector<char>;
 
+/**
+ * @brief read shader as binary bytecode.
+ */
 [[nodiscard]]
 ShaderBytecode read_shader_bytecode(const std::string& filename);
 
+/**
+ * @brief Compile shader bytecode into a shader module.
+ */
 [[nodiscard]]
 VkShaderModule compile_shader_bytecode(const VkDevice logical_device,
                                        const ShaderBytecode bytecode);
@@ -62,7 +72,9 @@ public:
                    const std::vector<RenderFrameLocks> framelocks,
                    const std::vector<std::shared_ptr<BasicUniformBuffer>> uniform_viewport,
                    const std::vector<VkCommandBuffer> commandbuffers,
-                   const VkCommandPool command_pool
+                   const VkCommandPool command_pool,
+                   
+                   Texture* TMP_texture
                    );
     
     VkExtent2D render_size() const;
@@ -77,8 +89,6 @@ public:
                                VkCommandBuffer command_buffer,
                                uint32_t image_index);
     
-    
-
     ~RenderPipeline() = default;
     void destroy();
     
@@ -106,6 +116,9 @@ private:
 
     bool m_swap_chain_framebuffer_resized{false};
     VkCommandPool m_command_pool;
+    
+
+    Texture* m_TMP_texture;
 };
     
 class RenderPipeline::Builder : protected IsNotLvalueCopyable

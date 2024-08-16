@@ -30,7 +30,7 @@ VkDescriptorSetLayout create_uniform_descriptorset_layout(
     const auto binding =
         create_descriptor_set_layout_binding(binding_index, count, flags);
     
-        VkDescriptorSetLayoutCreateInfo layout_info{};
+    VkDescriptorSetLayoutCreateInfo layout_info{};
     layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layout_info.bindingCount = count;
     layout_info.pBindings = &binding;
