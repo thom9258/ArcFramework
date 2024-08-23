@@ -11,23 +11,94 @@
 #define WIDTH 1200
 #define HEIGHT 900
 
-int main(int argc, char** argv) {
-    (void)argc;
-    (void)argv;
-    
-    auto device = ArcGraphics::Device::Builder()
-        .add_khronos_validation_layer()
-        .produce();
-   
-    auto renderer = ArcGraphics::Renderer::Builder(&device)
-        .with_wanted_window_size(1200, 800)
-        .with_window_name("Triangle")
-        .with_window_flags(SDL_WINDOW_BORDERLESS | SDL_WINDOW_SHOWN)
-        .produce();
+struct ViewPort {
+    glm::mat4 view;
+    glm::mat4 proj;
+    glm::mat4 model;
+};
 
-    /* ===================================================================
-     * Create DescriptorSet Layout for the pipeline
+struct VertexPosColorUV {
+    glm::vec3 pos{};
+    glm::vec3 color{};
+    glm::vec2 uv{};
+
+    [[nodiscard]]
+    static VkVertexInputBindingDescription get_binding_description();
+    [[nodiscard]]
+    static std::vector<VkVertexInputAttributeDescription> get_attribute_descriptions();
+};
+
+struct VertexBufferPolicyPosColorUV {
+    using value_type = VertexPosColorUV;
+    static const uint32_t buffer_type_bit;
+};
+
+const uint32_t VertexBufferPolicyPosColorUV::buffer_type_bit = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+ 
+VkVertexInputBindingDescription VertexPosColorUV::get_binding_description() {
+    VkVertexInputBindingDescription binding_description{};
+    binding_description.binding = 0;
+    binding_description.stride = sizeof(VertexPosColorUV);
+    binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    /*
+    VK_VERTEX_INPUT_RATE_VERTEX: Move to the next data entry after each vertex
+    VK_VERTEX_INPUT_RATE_INSTANCE: Move to the next data entry after each instance
      */
+    return binding_description;
+}
+
+std::vector<VkVertexInputAttributeDescription> VertexPosColorUV::get_attribute_descriptions() {
+     /*
+    float:  VK_FORMAT_R32_SFLOAT
+    vec2:   VK_FORMAT_R32G32_SFLOAT
+    vec3:   VK_FORMAT_R32G32B32_SFLOAT
+    vec4:   VK_FORMAT_R32G32B32A32_SFLOAT
+    ivec2:  VK_FORMAT_R32G32_SINT
+            a 2-component vector of 32-bit signed integers
+    uvec4:  VK_FORMAT_R32G32B32A32_UINT
+            a 4-component vector of 32-bit unsigned integers
+    double: VK_FORMAT_R64_SFLOAT
+            a double-precision (64-bit) float
+     */
+
+    std::vector<VkVertexInputAttributeDescription> attribute_descriptions(3);
+    attribute_descriptions[0].binding = 0;
+    attribute_descriptions[0].location = 0;
+    attribute_descriptions[0].offset = offsetof(VertexPosColorUV, pos);
+    attribute_descriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+
+    attribute_descriptions[1].binding = 0;
+    attribute_descriptions[1].location = 1;
+    attribute_descriptions[1].offset = offsetof(VertexPosColorUV, color);
+    attribute_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    
+    attribute_descriptions[2].binding = 0;
+    attribute_descriptions[2].location = 2;
+    attribute_descriptions[2].offset = offsetof(VertexPosColorUV, uv);
+    attribute_descriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+    return attribute_descriptions;
+}
+
+using VertexBufferPosColorUV = ArcGraphics::BasicBuffer<VertexBufferPolicyPosColorUV>;
+
+VkPipelineVertexInputStateCreateInfo create_vertex_input_state()
+{
+    const auto binding = VertexPosColorUV::get_binding_description();
+    const auto attribute = VertexPosColorUV::get_attribute_descriptions();
+
+    VkPipelineVertexInputStateCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    info.vertexBindingDescriptionCount = 1;
+    info.pVertexBindingDescriptions = &binding;
+    info.vertexAttributeDescriptionCount = static_cast<uint32_t>(attribute.size());
+    info.pVertexAttributeDescriptions = attribute.data();
+    return info;
+}
+ 
+
+std::tuple<std::vector<VkDescriptorSetLayoutBinding>, VkDescriptorSetLayout>
+create_bindings_and_descriptorset_layout(const VkDevice& logical_device)
+{
     VkDescriptorSetLayoutBinding viewport_layout_binding{};
     viewport_layout_binding.binding = 0;
     viewport_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -50,53 +121,78 @@ int main(int argc, char** argv) {
     descriptorset_layout_info.pBindings = bindings.data();
 
     VkDescriptorSetLayout descriptorset_layout{};
-    auto status = vkCreateDescriptorSetLayout(device.logical_device(),
+    auto status = vkCreateDescriptorSetLayout(logical_device,
                                               &descriptorset_layout_info,
                                               nullptr,
                                               &descriptorset_layout);
 
     if (status != VK_SUCCESS)
         throw std::runtime_error("failed to create descriptor set layout!");
+    return {bindings, descriptorset_layout};
+}
 
-    const auto vert = ArcGraphics::read_shader_bytecode("../perspective.vert.spv");
-    const auto frag = ArcGraphics::read_shader_bytecode("../perspective.frag.spv");
-    auto pipeline =
-        ArcGraphics::RenderPipeline::Builder(&device, &renderer,
-                                             vert, frag,
-                                             descriptorset_layout)
+
+int main(int argc, char** argv) {
+    (void)argc;
+    (void)argv;
+    
+    auto device = ArcGraphics::Device::Builder()
+        .add_khronos_validation_layer()
+        .produce();
+   
+    auto renderer = ArcGraphics::Renderer::Builder(&device)
+        .with_wanted_window_size(1200, 800)
+        .with_window_name("Triangle")
+        .with_window_flags(SDL_WINDOW_BORDERLESS | SDL_WINDOW_SHOWN)
+        .produce();
+    
+    const auto [bindings, descriptorset_layout] = create_bindings_and_descriptorset_layout(device.logical_device());
+
+    const auto vert = ArcGraphics::read_shader_bytecode("../texture.vert.spv");
+    const auto frag =
+        //ArcGraphics::read_shader_bytecode("../texture_uvs.frag.spv");
+        ArcGraphics::read_shader_bytecode("../texture.frag.spv");
+    auto pipeline = 
+        ArcGraphics::RenderPipeline::Builder(&device,
+                                             &renderer,
+                                             vert,
+                                             frag,
+                                             descriptorset_layout,
+                                             VertexPosColorUV::get_binding_description(),
+                                             VertexPosColorUV::get_attribute_descriptions()
+                                             )
         .with_frames_in_flight(3)
+        .with_use_alpha_blending(true)
+        .with_clear_color(0.2f, 0.2f, 0.4f)
         .produce();
 
-    const ArcGraphics::VertexBuffer::vector_type vertices = {
-        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+    const VertexBufferPosColorUV::vector_type vertices = {
+        {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{0.5f, -0.5f, 0.0f},  {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+        {{0.5f, 0.5f, 0.0f},   {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+        {{-0.5f, 0.5f, 0.0f},  {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
     };
+
     const ArcGraphics::IndexBuffer::vector_type indices = {
         0, 1, 2, 2, 3, 0
     };
 
-    auto vertex_buffer =
-        ArcGraphics::VertexBuffer::create_staging(device.physical_device(),
-                                                  device.logical_device(),
-                                                  pipeline.command_pool(),
-                                                  renderer.graphics_queue(),
-                                                  vertices);
-    
+    auto vertex_buffer = VertexBufferPosColorUV::create_staging(device.physical_device(),
+                                                                device.logical_device(),
+                                                                pipeline.command_pool(),
+                                                                renderer.graphics_queue(),
+                                                                vertices);
     if (!vertex_buffer)
         throw std::runtime_error("Failed to create vertex buffer!");
     
     auto index_buffer = ArcGraphics::IndexBuffer::create(device.physical_device(),
                                                          device.logical_device(),
                                                          indices);
-    
     if (!index_buffer)
         throw std::runtime_error("Failed to create index buffer!");
-    
 
+    //auto image = ArcGraphics::Image::load_from_path("../jinx_pixel_art.png");
     auto image = ArcGraphics::Image::load_from_path("../texture.jpg");
-    
     if (!image)
         throw std::runtime_error("Failed to load image from path!");
     
@@ -106,20 +202,15 @@ int main(int argc, char** argv) {
                                                         renderer.graphics_queue(),
                                                         pipeline.max_frames_in_flight(),
                                                         image.get());
-
     if (!texture)
         throw std::runtime_error("Failed to create texture from image!");
     
     /* ===================================================================
      * Create Descriptor Sets
      */
-    std::vector<VkDescriptorPoolSize> descriptor_pool_sizes{};
-    for (const auto& binding: bindings) {
-        VkDescriptorPoolSize size{};
-        size.type = binding.descriptorType;
-        size.descriptorCount = pipeline.max_frames_in_flight();
-        descriptor_pool_sizes.push_back(size);
-    }
+    std::vector<VkDescriptorPoolSize> descriptor_pool_sizes = 
+        ArcGraphics::create_descriptor_pool_sizes(bindings,
+                                                  pipeline.max_frames_in_flight());
 
     VkDescriptorPoolCreateInfo descriptor_pool_info{};
     descriptor_pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -128,25 +219,22 @@ int main(int argc, char** argv) {
     descriptor_pool_info.maxSets = pipeline.max_frames_in_flight();
 
     VkDescriptorPool descriptor_pool{};
-    status = vkCreateDescriptorPool(device.logical_device(),
-                                    &descriptor_pool_info,
-                                    nullptr,
-                                    &descriptor_pool);
+    auto status = vkCreateDescriptorPool(device.logical_device(),
+                                         &descriptor_pool_info,
+                                         nullptr,
+                                         &descriptor_pool);
     if (status != VK_SUCCESS)
         throw std::runtime_error("Failed to create descriptor pool for uniform buffer!");
 
-
-
-
-    std::vector<VkDescriptorSetLayout> layouts(pipeline.max_frames_in_flight(),
-                                               descriptorset_layout);
+    std::vector<VkDescriptorSetLayout> descriptorset_layouts(pipeline.max_frames_in_flight(),
+                                                             descriptorset_layout);
     
     VkDescriptorSetAllocateInfo descriptor_pool_alloc_info{};
     descriptor_pool_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     descriptor_pool_alloc_info.descriptorPool = descriptor_pool;
     descriptor_pool_alloc_info.descriptorSetCount = 
-        static_cast<uint32_t>(layouts.size());
-    descriptor_pool_alloc_info.pSetLayouts = layouts.data();
+        static_cast<uint32_t>(descriptorset_layouts.size());
+    descriptor_pool_alloc_info.pSetLayouts = descriptorset_layouts.data();
 
     std::vector<VkDescriptorSet> descriptorsets(pipeline.max_frames_in_flight());
     status = vkAllocateDescriptorSets(device.logical_device(),
@@ -164,45 +252,44 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < pipeline.max_frames_in_flight(); i++) {
         auto uniform = ArcGraphics::BasicUniformBuffer::create(device.physical_device(),
                                                                device.logical_device(),
-                                                               sizeof(ArcGraphics::ViewPort));
+                                                               sizeof(ViewPort));
         uniform_viewports.push_back(std::shared_ptr<ArcGraphics::BasicUniformBuffer>(uniform.release()));
     }
     std::cout << "created uniform buffers" << std::endl;
     
-    //TODO: I have found out that i should not create a texture image view and sampler,
-    // per-texture, but rather one specific one per- renderpipeline!
-    // https://vulkan-tutorial.com/Texture_mapping/Combined_image_sampler
-    // i need to figure out how to create a sampler and view to be able to facilitate
-    // different types of formats, and sizes?
-    // one approach seems to be to allocate view/sampler of some max width height, and
-    // in the shader accept texture size and to transformation from there,
-    std::vector<VkDescriptorImageInfo> uniform_images;
-    for (size_t i = 0; i < pipeline.max_frames_in_flight(); i++) {
-        VkDescriptorImageInfo image_info = texture->image_infos()[i];
-        uniform_images.push_back(image_info);
-    }
-    std::cout << "created uniform images" << std::endl;
+    VkDescriptorImageInfo image_info{};
+    image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    image_info.imageView = texture->view();
+    image_info.sampler = texture->sampler();
     
+    // TODO: This is very rigid and hardcoded, can it be made easier?
+    std::array<VkWriteDescriptorSet, 2> descriptor_writes{};
     for (size_t i = 0; i < pipeline.max_frames_in_flight(); i++) {
-        // Setup Descriptor buffer for ViewPort
-        VkDescriptorBufferInfo buffer_info =
-            uniform_viewports[i]->descriptor_buffer_info();
+        const auto buffer_info = uniform_viewports[i]->descriptor_buffer_info();
+        descriptor_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptor_writes[0].dstSet = descriptorsets[i];
+        descriptor_writes[0].dstBinding = 0;
+        descriptor_writes[0].dstArrayElement = 0;
+        descriptor_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptor_writes[0].descriptorCount = 1;
+        descriptor_writes[0].pBufferInfo = &buffer_info;
+        descriptor_writes[0].pImageInfo = nullptr;
+        descriptor_writes[0].pTexelBufferView = nullptr;
         
-        VkWriteDescriptorSet descriptor_write{};
-        descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_write.dstSet = descriptorsets[i];
-        descriptor_write.dstBinding = 0;
-        descriptor_write.dstArrayElement = 0;
-        descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptor_write.descriptorCount = 1;
-        descriptor_write.pBufferInfo = &buffer_info;
-        descriptor_write.pImageInfo = nullptr; // Optional
-        descriptor_write.pTexelBufferView = nullptr; // Optional
+        //const auto image_info = uniform_images[i];
+        descriptor_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptor_writes[1].dstSet = descriptorsets[i];
+        descriptor_writes[1].dstBinding = 1;
+        descriptor_writes[1].dstArrayElement = 0;
+        descriptor_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptor_writes[1].descriptorCount = 1;
+        descriptor_writes[1].pBufferInfo = nullptr;
+        descriptor_writes[1].pImageInfo = &image_info;
+        descriptor_writes[1].pTexelBufferView = nullptr;
     
-        uint32_t count = 1;
         vkUpdateDescriptorSets(device.logical_device(),
-                               count,
-                               &descriptor_write,
+                               static_cast<uint32_t>(descriptor_writes.size()),
+                               descriptor_writes.data(),
                                0,
                                nullptr);
     }
@@ -210,8 +297,8 @@ int main(int argc, char** argv) {
     std::cout << "Allocated uniform buffers!" << std::endl;
 
     auto view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f),
-                                glm::vec3(0.0f, 0.0f, 0.0f),
-                                glm::vec3(0.0f, 0.0f, 1.0f));
+                            glm::vec3(0.0f, 0.0f, 0.0f),
+                            glm::vec3(0.0f, 0.0f, 1.0f));
 
     const auto rendersize = pipeline.render_size();
 
@@ -276,15 +363,14 @@ int main(int argc, char** argv) {
 
         /* Bind Viewport
          */
-        ArcGraphics::ViewPort viewport{};
+        ViewPort viewport{};
         viewport.view = view;
         viewport.proj = proj;
         viewport.model = glm::rotate(glm::mat4(1.0f),
                                      time * glm::radians(90.0f),
                                      glm::vec3(0.0f, 0.0f, 1.0f));
- 
-        uniform_viewports[flight_frame]->set_uniform(&viewport);
-        
+
+
         vkCmdBindDescriptorSets(command_buffer,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 pipeline.layout(),
@@ -293,6 +379,8 @@ int main(int argc, char** argv) {
                                 &descriptorsets[flight_frame],
                                 0,
                                 nullptr);
+
+        uniform_viewports[flight_frame]->set_uniform(&viewport);
         
         /* Bind Vertices and Indices
          */
