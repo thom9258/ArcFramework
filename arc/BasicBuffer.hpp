@@ -13,15 +13,8 @@
 
 namespace ArcGraphics {
 
-[[nodiscard]]
-VkPhysicalDeviceMemoryProperties
-get_physical_device_memory_properties(const VkPhysicalDevice device);
-   
-[[nodiscard]]
-uint32_t find_memory_type(const VkPhysicalDeviceMemoryProperties mem_properties,
-                          const uint32_t type_filter,
-                          const VkMemoryPropertyFlags property_flags);
- 
+  
+
 void create_buffer(const VkPhysicalDevice& physical_device,
                    const VkDevice& logical_device,
                    const VkDeviceSize size,

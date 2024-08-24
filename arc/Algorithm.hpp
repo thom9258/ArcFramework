@@ -1,12 +1,7 @@
 #pragma once
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_vulkan.h>
-#include <vulkan/vulkan.h>
-
-#define GLM_FORCE_RADIANS
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include "SDLVulkan.hpp"
+#include "GLM.hpp"
 
 #include <string>
 #include <sstream>
@@ -76,10 +71,13 @@ VkApplicationInfo create_app_info(const char* appname);
 [[nodiscard]]
 std::vector<const char*> get_available_extensions(SDL_Window* window);
 
+   
 [[nodiscard]]
-VkDescriptorPool create_uniform_descriptor_pool(const VkDevice& logical_device,
-                                                const uint32_t frames_in_flight);
+std::vector<VkDescriptorPoolSize>
+create_descriptor_pool_sizes(const std::vector<VkDescriptorSetLayoutBinding> bindings,
+                             const uint32_t frames_in_flight);
     
+
 [[nodiscard]]
 VkInstanceCreateInfo create_instance_info(const std::vector<const char*>& extensions,
                                           const VkApplicationInfo* app_info);
@@ -98,7 +96,16 @@ std::vector<VkPhysicalDevice> get_available_physical_devices(const VkInstance in
 
 [[nodiscard]]
 VkPhysicalDeviceProperties get_physical_device_properties(const VkPhysicalDevice device);
+    
+[[nodiscard]]
+VkPhysicalDeviceMemoryProperties
+get_physical_device_memory_properties(const VkPhysicalDevice device);
 
+[[nodiscard]]
+uint32_t find_memory_type(const VkPhysicalDeviceMemoryProperties mem_properties,
+                          const uint32_t type_filter,
+                          const VkMemoryPropertyFlags property_flags);
+ 
 [[nodiscard]]
 VkPhysicalDeviceFeatures get_physical_device_features(const VkPhysicalDevice device);
 
@@ -175,11 +182,24 @@ remove_zero_score_devices(const std::vector<ScoredDevice>& score_devices);
     
 [[nodiscard]]
 VkExtent2D get_window_size(const VkDevice logical_device, SDL_Window* window);
+    
+    
+void create_image(const VkPhysicalDevice physical_device,
+                  const VkDevice logical_device,
+                  const uint32_t width,
+                  const uint32_t height,
+                  const VkFormat format,
+                  const VkImageTiling tiling,
+                  const VkImageUsageFlags usage,
+                  const VkMemoryPropertyFlags properties,
+                  VkImage& image,
+                  VkDeviceMemory& memory);
 
 [[nodiscard]]
 std::optional<VkImageView> create_image_view(const VkDevice& device,
                                              const VkImage image,
-                                             const VkFormat format);
+                                             const VkFormat format,
+                                             const VkImageAspectFlags aspect);
 
 [[nodiscard]]
 std::vector<VkImage> get_swap_chain_images(const VkDevice& device,

@@ -36,28 +36,21 @@ std::vector<const char*> get_available_extensions(SDL_Window* window)
     return available;
 }
     
-VkDescriptorPool create_uniform_descriptor_pool(const VkDevice& logical_device,
-                                                const uint32_t frames_in_flight
-)
+[[nodiscard]]
+std::vector<VkDescriptorPoolSize>
+create_descriptor_pool_sizes(const std::vector<VkDescriptorSetLayoutBinding> bindings,
+                             const uint32_t frames_in_flight)
 {
-    VkDescriptorPoolSize pool_size{};
-    pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    pool_size.descriptorCount = frames_in_flight;
-
-    VkDescriptorPoolCreateInfo pool_info{};
-    pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    pool_info.poolSizeCount = 1;
-    pool_info.pPoolSizes = &pool_size;
-    pool_info.maxSets = frames_in_flight;
-
-    VkDescriptorPool pool{};
-    const auto status = vkCreateDescriptorPool(logical_device, &pool_info, nullptr, &pool);
-    if (status != VK_SUCCESS)
-        throw std::runtime_error("Failed to create descriptor pool for uniform buffer!");
-
-    return pool;
+    std::vector<VkDescriptorPoolSize> sizes{};
+    for (const auto& binding: bindings) {
+        VkDescriptorPoolSize size{};
+        size.type = binding.descriptorType;
+        size.descriptorCount = frames_in_flight;
+        sizes.push_back(size);
+    }
+    return sizes;
 }
-  
+ 
 VkInstanceCreateInfo create_instance_info(const std::vector<const char*>& extensions,
                                           const VkApplicationInfo* app_info) 
 {
@@ -66,7 +59,6 @@ VkInstanceCreateInfo create_instance_info(const std::vector<const char*>& extens
     info.pApplicationInfo = app_info;
     info.enabledExtensionCount = extensions.size();
     info.ppEnabledExtensionNames = extensions.data();
-
     return info;
 }
     
@@ -404,11 +396,87 @@ VkExtent2D get_window_size(const VkDevice logical_device, SDL_Window* window)
     };
    return size;
 }
+
+[[nodiscard]]
+VkPhysicalDeviceMemoryProperties
+get_physical_device_memory_properties(const VkPhysicalDevice device)
+{
+    VkPhysicalDeviceMemoryProperties properties;
+    vkGetPhysicalDeviceMemoryProperties(device, &properties);
+    return properties;
+}   
+
+uint32_t find_memory_type(const VkPhysicalDeviceMemoryProperties mem_properties,
+                          const uint32_t type_filter,
+                          const VkMemoryPropertyFlags property_flags)
+{
+    for (uint32_t i = 0; i < mem_properties.memoryTypeCount; i++) {
+        if (type_filter & (1 << i)
+        && (mem_properties.memoryTypes[i].propertyFlags & property_flags) == property_flags)
+            return i;
+    }
+    throw std::runtime_error("failed to find suitable memory type!");
+}
+
+void create_image(const VkPhysicalDevice physical_device,
+                  const VkDevice logical_device,
+                  const uint32_t width,
+                  const uint32_t height,
+                  const VkFormat format,
+                  const VkImageTiling tiling,
+                  const VkImageUsageFlags usage,
+                  const VkMemoryPropertyFlags properties,
+                  VkImage& image,
+                  VkDeviceMemory& memory)
+{
+    VkImageCreateInfo image_info{};
+    image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    image_info.imageType = VK_IMAGE_TYPE_2D;
+    image_info.extent.width = width;
+    image_info.extent.height = height;
+    image_info.extent.depth = 1;
+    image_info.mipLevels = 1;
+    image_info.arrayLayers = 1;
+    image_info.format = format;
+    image_info.tiling = tiling;
+    //VK_IMAGE_TILING_LINEAR:
+    //  Texels are laid out in row-major order like our pixels array
+    //VK_IMAGE_TILING_OPTIMAL:
+    //  Texels are laid out in an implementation defined order for optimal access
+    image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    image_info.usage = usage;
+    image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_info.flags = 0;
+    
+    auto status = vkCreateImage(logical_device, &image_info, nullptr, &image);
+    if (status != VK_SUCCESS)
+        throw std::runtime_error("failed to create image!");
+    
+    VkMemoryRequirements mem_requirements;
+    vkGetImageMemoryRequirements(logical_device, image, &mem_requirements);
+
+    VkMemoryAllocateInfo alloc_info{};
+    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc_info.allocationSize = mem_requirements.size;
+    
+    const auto memory_properties = get_physical_device_memory_properties(physical_device);
+    alloc_info.memoryTypeIndex = find_memory_type(memory_properties,
+                                                  mem_requirements.memoryTypeBits,
+                                                  properties);
+
+    status = vkAllocateMemory(logical_device, &alloc_info, nullptr, &memory);
+    if (status != VK_SUCCESS)
+        throw std::runtime_error("failed to allocate image memory!");
+
+    vkBindImageMemory(logical_device, image, memory, 0);
+}
     
 [[nodiscard]]
 std::optional<VkImageView> create_image_view(const VkDevice& device,
                                              const VkImage image,
-                                             const VkFormat format)
+                                             const VkFormat format,
+                                             const VkImageAspectFlags aspect)
 {
     VkImageViewCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -421,7 +489,7 @@ std::optional<VkImageView> create_image_view(const VkDevice& device,
     create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
     create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
     create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-    create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    create_info.subresourceRange.aspectMask = aspect;
     create_info.subresourceRange.baseMipLevel = 0;
     create_info.subresourceRange.levelCount = 1;
     create_info.subresourceRange.baseArrayLayer = 0;
@@ -454,7 +522,10 @@ std::vector<VkImageView> get_swap_chain_image_views(const VkDevice& device,
     std::vector<VkImageView> views;
     const auto images = get_swap_chain_images(device, swap_chain);
     for (size_t i = 0; i < images.size(); i++) {
-        const auto view = create_image_view(device, images[i], format);
+        const auto view = create_image_view(device,
+                                            images[i],
+                                            format,
+                                            VK_IMAGE_ASPECT_COLOR_BIT);
         if (!view)
             throw std::runtime_error("Could not create swap chain image views!");
         views.push_back(*view);

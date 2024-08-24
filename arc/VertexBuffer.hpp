@@ -11,6 +11,8 @@
 
 namespace ArcGraphics {
     
+//TODO: Move these out of arcgraphics, this is implementation defined!
+#if 0
 struct Vertex {
     glm::vec2 pos{};
     glm::vec3 color{};
@@ -27,5 +29,6 @@ struct VertexBufferPolicy {
 };
 
 using VertexBuffer = BasicBuffer<VertexBufferPolicy>;
+#endif
 
 }

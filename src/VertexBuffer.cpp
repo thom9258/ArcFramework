@@ -1,7 +1,8 @@
 #include "../arc/VertexBuffer.hpp"
 
 namespace ArcGraphics {
-    
+
+#if 0
 const uint32_t VertexBufferPolicy::buffer_type_bit = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
  
 VkVertexInputBindingDescription Vertex::get_binding_description() {
@@ -41,5 +42,6 @@ std::array<VkVertexInputAttributeDescription, 2> Vertex::get_attribute_descripti
     attribute_descriptions[1].offset = offsetof(Vertex, color);
     return attribute_descriptions;
 }
+#endif
 
 }

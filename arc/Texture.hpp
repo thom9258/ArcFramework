@@ -32,16 +32,15 @@ public:
     int m_height;
     int m_channels;
 };
-    
+   
 class Texture : IsNotLvalueCopyable
 {
 public:
     Texture(const VkImage image,
             const VkDeviceMemory memory,
             const VkFormat format,
-            const std::vector<VkImageView> views,
-            const std::vector<VkSampler> samplers,
-            const std::vector<VkDescriptorImageInfo> infos
+            const VkImageView view,
+            const VkSampler sampler
             );
 
     void destroy(const VkDevice logical_device);
@@ -56,33 +55,30 @@ public:
                                                    const VkDevice& logical_device,
                                                    const VkCommandPool& command_pool,
                                                    const VkQueue& graphics_queue,
-                                                   const uint32_t frames_in_flight,
+                                                   const VkFormat format,
                                                    const Image* image);
     
     [[nodiscard]]
     const VkImage& image();
 
     [[nodiscard]]
+    const VkDeviceMemory& memory();
+
+    [[nodiscard]]
     VkFormat format();
    
     [[nodiscard]]
-    const std::vector<VkDescriptorImageInfo>& image_infos();
-
-private:
-    [[nodiscard]]
-    const std::vector<VkImageView>& views();
+    const VkImageView& view();
 
     [[nodiscard]]
-    const std::vector<VkSampler>& samplers();
+    const VkSampler& sampler();
     
-
+private:
     VkImage m_image;
     VkDeviceMemory m_memory;
     VkFormat m_format;
-    // Per-Frame-in-Flight views / samplers and their combined infos
-    std::vector<VkImageView> m_views;
-    std::vector<VkSampler> m_samplers;
-    std::vector<VkDescriptorImageInfo> m_infos;
+    VkImageView m_view;
+    VkSampler m_sampler;
 };
 
 } 

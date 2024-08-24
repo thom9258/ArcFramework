@@ -54,39 +54,64 @@ create_unit_plane()
         {{0.5f, 0.5f, 0.0f},   {0.0f, 1.0f}},
         {{-0.5f, 0.5f, 0.0f},  {1.0f, 1.0f}}
     };
-    const ArcGraphics::IndexBuffer::vector_type indices = {
+    const IndexBuffer::vector_type indices = {
         0, 1, 2, 2, 3, 0
     };
     return {vertices, indices};
 }
     
-
 std::pair<VertexBuffer_PosTex::vector_type, ArcGraphics::IndexBuffer::vector_type> 
 create_unit_cube()
 {
     const VertexBuffer_PosTex::vector_type vertices = {
-        //front
-        {{ 0.5f,  0.5f, 0.5f}, {1.0f, 1.0f}},  // top right
-        {{ 0.5f, -0.5f, 0.5f}, {1.0f, 0.0f}},  // bottom right
-        {{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}},  // bottom left
-        {{-0.5f,  0.5f, 0.5f}, {0.0f, 1.0f}},  // top left 
-        //back
-        {{ 0.5f,  0.5f, -0.5f}, {1.0f, 1.0f}}, // top right
-        {{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}}, // bottom right
-        {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}}, // bottom left
-        {{-0.5f,  0.5f, -0.5f}, {0.0f, 1.0f}}  // top left 
-    }; 
+        {{-0.5f, -0.5f, -0.5f}, { 0.0f, 0.0f}}, // A 0
+        {{0.5f, -0.5f, -0.5f},  {1.0f, 0.0f}},  // B 1
+        {{0.5f,  0.5f, -0.5f},  {1.0f, 1.0f }}, // C 2
+        {{-0.5f,  0.5f, -0.5f}, { 0.0f, 1.0f}}, // D 3
+        {{-0.5f, -0.5f,  0.5f}, { 0.0f, 0.0f}}, // E 4
+        {{0.5f, -0.5f,  0.5f},  {1.0f, 0.0f}},  // F 5
+        {{0.5f,  0.5f,  0.5f},  {1.0f, 1.0f}},  // G 6
+        {{-0.5f,  0.5f,  0.5f}, { 0.0f, 1.0f}}, // H 7
+
+        {{-0.5f,  0.5f, -0.5f}, { 0.0f, 0.0f}}, // D 8
+        {{-0.5f, -0.5f, -0.5f}, { 1.0f, 0.0f}}, // A 9
+        {{-0.5f, -0.5f,  0.5f}, { 1.0f, 1.0f}}, // E 10
+        {{-0.5f,  0.5f,  0.5f}, { 0.0f, 1.0f}}, // H 11
+        {{0.5f, -0.5f, -0.5f},  {0.0f, 0.0f}},  // B 12
+        {{0.5f,  0.5f, -0.5f},  {1.0f, 0.0f}},  // C 13
+        {{0.5f,  0.5f,  0.5f},  {1.0f, 1.0f}},  // G 14
+        {{0.5f, -0.5f,  0.5f},  {0.0f, 1.0f}},  // F 15
+
+        {{-0.5f, -0.5f, -0.5f}, { 0.0f, 0.0f}}, // A 16
+        {{0.5f, -0.5f, -0.5f},  {1.0f, 0.0f}},  // B 17
+        {{0.5f, -0.5f,  0.5f},  {1.0f, 1.0f}},  // F 18
+        {{-0.5f, -0.5f,  0.5f}, { 0.0f, 1.0f}}, // E 19
+        {{0.5f,  0.5f, -0.5f},  { 0.0f, 0.0f}}, // C 20
+        {{-0.5f,  0.5f, -0.5f}, { 1.0f, 0.0f}}, // D 21
+        {{-0.5f,  0.5f,  0.5f}, { 1.0f, 1.0f}}, // H 22
+        {{0.5f,  0.5f,  0.5f},  { 0.0f, 1.0f}}  // G 23
+    };
 
     const ArcGraphics::IndexBuffer::vector_type indices = {
-        0, 1, 5,    5, 1, 6,
-        1, 2, 6,    6, 2, 7,
-        2, 3, 7,    7, 3, 8,
-        3, 4, 8,    8, 4, 9,
-        10, 11, 0,  0, 11, 1,
-        5, 6, 12,   12, 6, 13
-     };
+        // front and back
+        0, 3, 2,
+        2, 1, 0,
+        4, 5, 6,
+        6, 7 ,4,
+        // left and right
+        11, 8, 9,
+        9, 10, 11,
+        12, 13, 14,
+        14, 15, 12,
+        // bottom and top
+        16, 17, 18,
+        18, 19, 16,
+        20, 21, 22,
+        22, 23, 20
+    };
 
     return {vertices, indices};
 }
+    
 
 }

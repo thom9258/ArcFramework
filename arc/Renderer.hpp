@@ -1,10 +1,8 @@
 #pragma once
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_vulkan.h>
-#include <vulkan/vulkan.h>
-
+#include "SDLVulkan.hpp"
 #include "Device.hpp"
+#include "Texture.hpp"
 
 #include <vector>
 
@@ -24,7 +22,11 @@ public:
              const std::vector<VkImageView> swapchain_image_views,
              const VkSurfaceFormatKHR surface_format,
              const DeviceRenderingCapabilities capabilities,
-             const VkQueue graphics_queue
+             const VkQueue graphics_queue,
+             const VkImage depthbuffer_image,
+             const VkDeviceMemory depthbuffer_memory,
+             const VkImageView depthbuffer_view,
+             const VkFormat depthbuffer_format
              );
 
     ~Renderer() = default;
@@ -38,6 +40,9 @@ public:
     const VkSwapchainKHR& swapchain() const;
     const VkSurfaceFormatKHR& surface_format() const;
     const VkQueue& graphics_queue() const;
+    
+    const VkFormat& depthbuffer_format() const;
+    const VkImageView& depthbuffer_image_view() const;
 
     VkExtent2D window_size() const;
 
@@ -52,6 +57,11 @@ private:
     VkSurfaceFormatKHR m_surface_format;
     DeviceRenderingCapabilities m_capabilities;
     VkQueue m_graphics_queue;
+
+    VkImage m_depthbuffer_image;
+    VkDeviceMemory m_depthbuffer_memory;
+    VkImageView m_depthbuffer_view;
+    VkFormat m_depthbuffer_format;
 };
     
 class Renderer::Builder 

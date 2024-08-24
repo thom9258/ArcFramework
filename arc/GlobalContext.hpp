@@ -1,5 +1,4 @@
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_vulkan.h>
+#include "SDLVulkan.hpp"
 
 #include "TypeTraits.hpp"
 

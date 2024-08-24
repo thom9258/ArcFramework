@@ -76,20 +76,6 @@ VkPipelineColorBlendStateCreateInfo create_color_blend_state_info(const bool use
     return color_blending;
 }
     
-DrawableGeometry::DrawableGeometry()
-: DrawableGeometry(glm::mat4(1), nullptr, nullptr)
-{
-}
-
-DrawableGeometry::DrawableGeometry(glm::mat4 model,
-                                   VertexBuffer* vertices,
-                                   IndexBuffer* indices)
-: model(model)
-, vertices(vertices)
-, indices(indices)
-{
-}
-    
 const VkCommandPool& RenderPipeline::command_pool() const
 {
     return m_command_pool;
@@ -190,20 +176,24 @@ VkCommandBuffer RenderPipeline::begin_command_buffer(uint32_t image_index)
      const auto capabilities = get_rendering_capabilities(m_device->physical_device(),
                                                           m_renderer->window_surface()); 
     
+     // NOTE: the order is dependent on the order of the attachment descriptions
+     // used to create the render pass!
+     std::array<VkClearValue, 2> clear_values{};
+     clear_values[0] = m_clear_value;
+     clear_values[1].depthStencil = {1.0f, 0};   
+
     VkRenderPassBeginInfo renderpass_info{};
     renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderpass_info.renderPass = m_render_pass;
     renderpass_info.framebuffer = m_swap_chain_framebuffers[image_index];
     renderpass_info.renderArea.offset = {0, 0};
     renderpass_info.renderArea.extent = m_render_size;
-
-    VkClearValue clear_color = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-    renderpass_info.clearValueCount = 1;
-    renderpass_info.pClearValues = &clear_color;
+    renderpass_info.clearValueCount = static_cast<uint32_t>(clear_values.size());
+    renderpass_info.pClearValues = clear_values.data();
 
     vkCmdBeginRenderPass(command_buffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);   
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphics_pipeline);
-
+    
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -212,7 +202,7 @@ VkCommandBuffer RenderPipeline::begin_command_buffer(uint32_t image_index)
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(command_buffer, 0, 1, &viewport);
-
+    
     VkRect2D scissor{};
     scissor.offset = {0, 0};
     scissor.extent = m_render_size;
@@ -285,6 +275,7 @@ RenderPipeline::RenderPipeline(Device* device,
                                const VkPipelineLayout graphics_pipeline_layout,
                                const VkPipeline graphics_pipeline,
                                const VkExtent2D render_size,
+                               const VkClearValue clear_value,
                                const std::vector<VkFramebuffer> framebuffers,
                                const std::vector<RenderFrameLocks> framelocks,
                                const std::vector<VkCommandBuffer> commandbuffers,
@@ -295,6 +286,7 @@ RenderPipeline::RenderPipeline(Device* device,
     , m_graphics_pipeline_layout(graphics_pipeline_layout)
     , m_graphics_pipeline(graphics_pipeline)
     , m_render_size(render_size)
+    , m_clear_value(clear_value)
     , m_swap_chain_framebuffers(framebuffers)
     , m_framelocks(framelocks)
     , m_commandbuffers(commandbuffers)
@@ -334,15 +326,19 @@ void RenderPipeline::destroy()
 }
     
 RenderPipeline::Builder::Builder(Device* device,
-                                 Renderer* renderer,
-                                 const ShaderBytecode vertex_bytecode,
-                                 const ShaderBytecode fragment_bytecode,
-                                 const VkDescriptorSetLayout descriptorset_layout)
+    Renderer* renderer,
+    const ShaderBytecode vertex_bytecode,
+    const ShaderBytecode fragment_bytecode,
+    const VkDescriptorSetLayout descriptorset_layout,
+    const VkVertexInputBindingDescription vertex_binding_description,
+    const std::vector<VkVertexInputAttributeDescription> vertex_attribute_descriptions)
     : m_device(device)
     , m_renderer(renderer)
     , m_vertex_bytecode(vertex_bytecode)
     , m_fragment_bytecode(fragment_bytecode)
     , m_descriptorset_layout(descriptorset_layout)
+    , m_vertex_binding_description(vertex_binding_description)
+    , m_vertex_attribute_descriptions(vertex_attribute_descriptions)
 {
     if (!m_device)
         throw std::runtime_error("RenderPipeline::Builder() device was nullptr!");
@@ -372,6 +368,18 @@ RenderPipeline::Builder& RenderPipeline::Builder::with_use_alpha_blending(const 
     return *this;
 }
 
+RenderPipeline::Builder& RenderPipeline::Builder::with_clear_color(const float r,
+                                                                   const float g,
+                                                                   const float b)
+{
+
+    m_clear_value.color = {{std::clamp(r, 0.0f, 1.0f),
+                            std::clamp(g, 0.0f, 1.0f), 
+                            std::clamp(b, 0.0f, 1.0f),
+                            1.0f}};
+    return *this;
+}
+
 RenderPipeline RenderPipeline::Builder::produce()
 {
     std::cout << "==================================================\n"
@@ -398,22 +406,8 @@ RenderPipeline RenderPipeline::Builder::produce()
     fragment_create_info.pName = "main";   
     
     VkPipelineShaderStageCreateInfo shader_stages[] = {vertex_create_info,
-    fragment_create_info};
+                                                       fragment_create_info};
 
-    VkPipelineVertexInputStateCreateInfo vertex_input_info{};
-    vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    
-    // TODO: This is not correct, it should be able to bind different descriptions right?
-    // This is a per-shader thing, does this mean we could be able to have multiple
-    // shaders per pipeline?
-    const auto binding_description = Vertex::get_binding_description();
-    vertex_input_info.vertexBindingDescriptionCount = 1;
-    vertex_input_info.pVertexBindingDescriptions = &binding_description;
-    const auto attribute_descriptions = Vertex::get_attribute_descriptions();
-    vertex_input_info.vertexAttributeDescriptionCount =
-        static_cast<uint32_t>(attribute_descriptions.size());
-    vertex_input_info.pVertexAttributeDescriptions = attribute_descriptions.data();
-    
     VkPipelineInputAssemblyStateCreateInfo input_assembly{};
     input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -469,6 +463,7 @@ RenderPipeline RenderPipeline::Builder::produce()
     
     VkPipelineLayoutCreateInfo pipeline_layout_info{};
     pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    // NOTE this can technically take a list
     pipeline_layout_info.setLayoutCount = 1;
     pipeline_layout_info.pSetLayouts = &m_descriptorset_layout;
     pipeline_layout_info.pushConstantRangeCount = 0; // Optional
@@ -485,10 +480,23 @@ RenderPipeline RenderPipeline::Builder::produce()
     /* ===================================================================
      * Create Render Passes
      */
-    const auto surface_format = m_renderer->surface_format().format;
+    
+    VkAttachmentDescription depth_attachment{};
+    depth_attachment.format = m_renderer->depthbuffer_format();
+    depth_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depth_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depth_attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference depth_attachment_ref{};
+    depth_attachment_ref.attachment = 1;
+    depth_attachment_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     VkAttachmentDescription color_attachment{};
-    color_attachment.format = surface_format;
+    color_attachment.format = m_renderer->surface_format().format;
     color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
     color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -505,14 +513,38 @@ RenderPipeline RenderPipeline::Builder::produce()
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &color_attachment_ref;
+    subpass.pDepthStencilAttachment = &depth_attachment_ref;
     
+    VkSubpassDependency subpass_dependency{};
+    subpass_dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    subpass_dependency.dstSubpass = 0;
+    subpass_dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    subpass_dependency.srcStageMask 
+        = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT 
+        | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    subpass_dependency.dstStageMask 
+        = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT 
+        | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    subpass_dependency.dstAccessMask 
+        = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT 
+        | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+    // TODO: If we dont have a depth buffer use these instead
+    //subpass_dependency.srcAccessMask = 0;
+    //subpass_dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    //subpass_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    std::array<VkAttachmentDescription, 2> attachments = {color_attachment,
+                                                          depth_attachment};
     VkRenderPassCreateInfo render_pass_info{};
     render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    render_pass_info.attachmentCount = 1;
-    render_pass_info.pAttachments = &color_attachment;
+    render_pass_info.attachmentCount = static_cast<uint32_t>(attachments.size());
+    render_pass_info.pAttachments = attachments.data();
     render_pass_info.subpassCount = 1;
     render_pass_info.pSubpasses = &subpass;
-    
+    render_pass_info.dependencyCount = 1;
+    render_pass_info.pDependencies = &subpass_dependency;
+   
     VkRenderPass render_pass;
     status = vkCreateRenderPass(m_device->logical_device(),
                                 &render_pass_info,
@@ -544,6 +576,31 @@ RenderPipeline RenderPipeline::Builder::produce()
     const auto color_blending =
         create_color_blend_state_info(color_blending_attachment_state);
     
+    std::cout << "vertex attribute descriptions count: " << m_vertex_attribute_descriptions.size()
+        << std::endl;
+    
+    VkPipelineVertexInputStateCreateInfo vertex_input_info{};
+    vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    //NOTE this can be a vector
+    vertex_input_info.vertexBindingDescriptionCount = 1;
+    vertex_input_info.pVertexBindingDescriptions = &m_vertex_binding_description;
+    vertex_input_info.vertexAttributeDescriptionCount =
+        static_cast<uint32_t>(m_vertex_attribute_descriptions.size());
+    vertex_input_info.pVertexAttributeDescriptions =
+        m_vertex_attribute_descriptions.data();
+    
+    VkPipelineDepthStencilStateCreateInfo depth_stencil{};
+    depth_stencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depth_stencil.depthTestEnable = VK_TRUE;
+    depth_stencil.depthWriteEnable = VK_TRUE;
+    depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS;
+    depth_stencil.depthBoundsTestEnable = VK_FALSE;
+    depth_stencil.minDepthBounds = 0.0f; // Optional
+    depth_stencil.maxDepthBounds = 1.0f; // Optional
+    depth_stencil.stencilTestEnable = VK_FALSE;
+    depth_stencil.front = {}; // Optional
+    depth_stencil.back = {}; // Optional
+    
     VkGraphicsPipelineCreateInfo pipeline_info{};
     pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipeline_info.stageCount = 2;
@@ -553,7 +610,7 @@ RenderPipeline RenderPipeline::Builder::produce()
     pipeline_info.pViewportState = &viewport_state;
     pipeline_info.pRasterizationState = &rasterizer;
     pipeline_info.pMultisampleState = &multisampling;
-    pipeline_info.pDepthStencilState = nullptr; // Optional
+    pipeline_info.pDepthStencilState = &depth_stencil;
     pipeline_info.pColorBlendState = &color_blending;
     pipeline_info.pDynamicState = &dynamic_state;
     pipeline_info.layout = graphics_pipeline_layout;
@@ -587,12 +644,15 @@ RenderPipeline RenderPipeline::Builder::produce()
     std::vector<VkFramebuffer> swapchain_framebuffers(framebuffer_count);
 
     for (size_t i = 0; i < framebuffer_count; i++) {
-        VkImageView attachments[] = {m_renderer->swapchain_image_view(i)};
+        const std::vector<VkImageView> attachments = {
+            m_renderer->swapchain_image_view(i),
+            m_renderer->depthbuffer_image_view()
+        };
         VkFramebufferCreateInfo framebuffer_info{};
         framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebuffer_info.renderPass = render_pass;
-        framebuffer_info.attachmentCount = 1;
-        framebuffer_info.pAttachments = attachments;
+        framebuffer_info.attachmentCount = static_cast<uint32_t>(attachments.size());
+        framebuffer_info.pAttachments = attachments.data();
         framebuffer_info.width = render_size.width;
         framebuffer_info.height = render_size.height;
         framebuffer_info.layers = 1;
@@ -704,6 +764,7 @@ RenderPipeline RenderPipeline::Builder::produce()
                           graphics_pipeline_layout,
                           graphics_pipeline,
                           render_size,
+                          m_clear_value,
                           swapchain_framebuffers,
                           framelocks,
                           commandbuffers,

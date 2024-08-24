@@ -28,7 +28,6 @@ using VertexBuffer_PosTex = ArcGraphics::BasicBuffer<VertexBufferPolicy_PosTex>;
 std::pair<VertexBuffer_PosTex::vector_type, ArcGraphics::IndexBuffer::vector_type>
 create_unit_plane();
 
-//TODO: I have no idea if this thing works!
 [[nodiscard]]
 std::pair<VertexBuffer_PosTex::vector_type, ArcGraphics::IndexBuffer::vector_type>
 create_unit_cube();

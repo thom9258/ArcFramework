@@ -2,27 +2,7 @@
 
 namespace ArcGraphics {
 
-[[nodiscard]]
-VkPhysicalDeviceMemoryProperties
-get_physical_device_memory_properties(const VkPhysicalDevice device)
-{
-    VkPhysicalDeviceMemoryProperties properties;
-    vkGetPhysicalDeviceMemoryProperties(device, &properties);
-    return properties;
-}   
 
-uint32_t find_memory_type(const VkPhysicalDeviceMemoryProperties mem_properties,
-                          const uint32_t type_filter,
-                          const VkMemoryPropertyFlags property_flags)
-{
-    for (uint32_t i = 0; i < mem_properties.memoryTypeCount; i++) {
-        if (type_filter & (1 << i)
-        && (mem_properties.memoryTypes[i].propertyFlags & property_flags) == property_flags)
-            return i;
-    }
-    throw std::runtime_error("failed to find suitable memory type!");
-}
- 
 void create_buffer(const VkPhysicalDevice& physical_device,
                    const VkDevice& logical_device,
                    const VkDeviceSize size,
@@ -63,7 +43,7 @@ void create_buffer(const VkPhysicalDevice& physical_device,
                               nullptr,
                               &out_memory);
     if (status != VK_SUCCESS)
-        throw std::runtime_error("failed to allocate vertex buffer memory!"
+        throw std::runtime_error("failed to allocate buffer memory!"
                                  " now you have a leak because we did not clean up anyhting..");
     
     vkBindBufferMemory(logical_device,
@@ -157,8 +137,6 @@ UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout(ERROR / SPEC): msgNum: 13
     The problem seems to be that the layout is somehow not handled correctly, and reset to
     VK_IMAGE_LAYOUT_UNDEFINED
      */
-
-
 
     const auto transition = [&] (VkCommandBuffer& command_buffer) {
         VkImageMemoryBarrier barrier{};
